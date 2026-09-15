@@ -178,14 +178,16 @@
                                      VerticalScrollBarVisibility="Auto"
                                      Padding="10"
                                      ToolTip="한글 자연어로 이미지 수정 내용을 입력하세요." />
-                            <Button Grid.Row="1"
+                            <Button x:Name="EditImageButton"
+                                    Grid.Row="1"
                                     Content="이미지 수정"
                                     HorizontalAlignment="Right"
                                     Margin="0,8,0,0"
                                     Padding="18,8"
                                     Background="{StaticResource AccentBrush}"
                                     Foreground="White"
-                                    BorderBrush="{StaticResource AccentBrush}" />
+                                    BorderBrush="{StaticResource AccentBrush}"
+                                    Click="EditImageButton_Click" />
                         </Grid>
                     </Border>
                 </Grid>
