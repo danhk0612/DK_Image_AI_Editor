@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,6 +23,7 @@ public partial class MainWindow : Window
     private readonly OpenRouterImageService _openRouterImageService = new();
     private ConversationRecord? _currentConversation;
     private string? _currentImagePath;
+    private bool _isBusy;
 
     public MainWindow()
     {
@@ -32,6 +34,11 @@ public partial class MainWindow : Window
 
     private void NewConversationButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_isBusy)
+        {
+            return;
+        }
+
         var dialog = new OpenFileDialog
         {
             Title = "편집할 이미지 선택",
@@ -47,6 +54,11 @@ public partial class MainWindow : Window
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_isBusy)
+        {
+            return;
+        }
+
         var settingsWindow = new SettingsWindow
         {
             Owner = this
@@ -56,12 +68,19 @@ public partial class MainWindow : Window
 
     private void Window_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = TryGetSingleImagePath(e.Data, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = !_isBusy && TryGetSingleImagePath(e.Data, out _)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
         e.Handled = true;
     }
 
     private void Window_Drop(object sender, DragEventArgs e)
     {
+        if (_isBusy)
+        {
+            return;
+        }
+
         if (TryGetSingleImagePath(e.Data, out var imagePath))
         {
             StartConversation(imagePath!);
@@ -70,6 +89,11 @@ public partial class MainWindow : Window
 
     private void ConversationList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isBusy)
+        {
+            return;
+        }
+
         if (ConversationList.SelectedItem is ListBoxItem { Tag: ConversationRecord conversation })
         {
             ShowConversation(conversation);
@@ -78,6 +102,11 @@ public partial class MainWindow : Window
 
     private void DeleteConversationButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_isBusy)
+        {
+            return;
+        }
+
         if (sender is not Button { Tag: string conversationId })
         {
             return;
@@ -116,6 +145,11 @@ public partial class MainWindow : Window
 
     private async void EditImageButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_isBusy)
+        {
+            return;
+        }
+
         if (_currentConversation is null || string.IsNullOrWhiteSpace(_currentImagePath))
         {
             MessageBox.Show(this, "먼저 편집할 이미지 대화를 선택하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -142,13 +176,17 @@ public partial class MainWindow : Window
         var sourceImagePath = _currentImagePath;
         var edits = _conversationStore.GetEdits(conversationId);
         var sequence = edits.Count + 1;
+        var stopwatch = Stopwatch.StartNew();
 
-        EditImageButton.IsEnabled = false;
-        EditImageButton.Content = "수정 중...";
+        SetOperationState(true, "요청 준비 중...");
+        await Task.Yield();
 
         try
         {
+            await UpdateOperationStatusAsync("원본 이미지를 읽는 중...");
             var sourceBytes = await File.ReadAllBytesAsync(sourceImagePath);
+
+            await UpdateOperationStatusAsync($"OpenRouter 응답 대기 중... ({modelId})");
             var result = await _openRouterImageService.EditImageAsync(
                 apiKey,
                 modelId,
@@ -156,12 +194,14 @@ public partial class MainWindow : Window
                 GetImageMediaType(sourceImagePath),
                 prompt);
 
+            await UpdateOperationStatusAsync("결과 이미지를 저장하는 중...");
             var outputPath = _conversationStore.GetVersionImagePath(
                 conversationId,
                 sequence,
                 GetImageExtension(result.MediaType));
             await File.WriteAllBytesAsync(outputPath, result.ImageBytes);
 
+            await UpdateOperationStatusAsync("편집 기록을 저장하는 중...");
             var createdAt = DateTimeOffset.UtcNow;
             _conversationStore.AddEdit(new EditRecord(
                 Guid.NewGuid().ToString("N"),
@@ -178,11 +218,20 @@ public partial class MainWindow : Window
                 outputPath,
                 createdAt));
 
+            await UpdateOperationStatusAsync("화면을 갱신하는 중...");
             PromptTextBox.Clear();
+
+            _isBusy = false;
             RefreshConversationList(conversationId);
+
+            stopwatch.Stop();
+            SetOperationState(false, $"완료 ({stopwatch.Elapsed.TotalSeconds:F1}초)");
         }
         catch (Exception exception)
         {
+            stopwatch.Stop();
+            SetOperationState(false, $"실패 ({stopwatch.Elapsed.TotalSeconds:F1}초)");
+
             MessageBox.Show(
                 this,
                 exception.Message,
@@ -190,11 +239,26 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
-        finally
-        {
-            EditImageButton.Content = "이미지 수정";
-            EditImageButton.IsEnabled = true;
-        }
+    }
+
+    private void SetOperationState(bool isBusy, string statusMessage)
+    {
+        _isBusy = isBusy;
+        OperationStatusTextBlock.Text = statusMessage;
+        OperationProgressBar.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
+
+        EditImageButton.IsEnabled = !isBusy;
+        EditImageButton.Content = isBusy ? "수정 중..." : "이미지 수정";
+        PromptTextBox.IsEnabled = !isBusy;
+        ConversationList.IsEnabled = !isBusy;
+        NewConversationButton.IsEnabled = !isBusy;
+        SettingsButton.IsEnabled = !isBusy;
+    }
+
+    private async Task UpdateOperationStatusAsync(string statusMessage)
+    {
+        OperationStatusTextBlock.Text = statusMessage;
+        await Task.Yield();
     }
 
     private static bool TryGetSingleImagePath(IDataObject data, out string? imagePath)
