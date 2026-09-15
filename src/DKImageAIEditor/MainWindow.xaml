@@ -32,11 +32,13 @@
                                VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Content="새 대화"
+                    <Button x:Name="NewConversationButton"
+                            Content="새 대화"
                             Padding="16,7"
                             Margin="0,0,8,0"
                             Click="NewConversationButton_Click" />
-                    <Button Content="설정"
+                    <Button x:Name="SettingsButton"
+                            Content="설정"
                             Padding="16,7"
                             Click="SettingsButton_Click" />
                 </StackPanel>
@@ -169,8 +171,25 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
+
+                            <TextBlock x:Name="OperationStatusTextBlock"
+                                       Text="준비됨"
+                                       Foreground="#69717E"
+                                       FontSize="12"
+                                       Margin="0,0,0,6" />
+
+                            <ProgressBar x:Name="OperationProgressBar"
+                                         Grid.Row="1"
+                                         Height="7"
+                                         Margin="0,0,0,8"
+                                         IsIndeterminate="True"
+                                         Visibility="Collapsed" />
+
                             <TextBox x:Name="PromptTextBox"
+                                     Grid.Row="2"
                                      MinHeight="90"
                                      MaxHeight="180"
                                      AcceptsReturn="True"
@@ -178,8 +197,9 @@
                                      VerticalScrollBarVisibility="Auto"
                                      Padding="10"
                                      ToolTip="한글 자연어로 이미지 수정 내용을 입력하세요." />
+
                             <Button x:Name="EditImageButton"
-                                    Grid.Row="1"
+                                    Grid.Row="3"
                                     Content="이미지 수정"
                                     HorizontalAlignment="Right"
                                     Margin="0,8,0,0"
