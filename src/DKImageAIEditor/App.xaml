@@ -1,0 +1,11 @@
+<Application x:Class="DKImageAIEditor.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F5F6F8" />
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#D9DEE7" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#352E59" />
+    </Application.Resources>
+</Application>
