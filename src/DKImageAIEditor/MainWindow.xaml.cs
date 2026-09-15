@@ -1,7 +1,10 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using DKImageAIEditor.Models;
+using DKImageAIEditor.Services;
 using DKImageAIEditor.Views;
 using Microsoft.Win32;
 
@@ -14,11 +17,15 @@ public partial class MainWindow : Window
         ".png", ".jpg", ".jpeg", ".bmp"
     };
 
+    private readonly ConversationStore _conversationStore = new();
+    private ConversationRecord? _currentConversation;
     private string? _currentImagePath;
 
     public MainWindow()
     {
         InitializeComponent();
+        ConversationList.SelectionChanged += ConversationList_SelectionChanged;
+        RefreshConversationList();
     }
 
     private void NewConversationButton_Click(object sender, RoutedEventArgs e)
@@ -59,6 +66,52 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ConversationList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ConversationList.SelectedItem is ListBoxItem { Tag: ConversationRecord conversation })
+        {
+            ShowConversation(conversation);
+        }
+    }
+
+    private void DeleteConversationButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string conversationId })
+        {
+            return;
+        }
+
+        var conversation = _conversationStore.GetConversation(conversationId);
+        if (conversation is null)
+        {
+            return;
+        }
+
+        var result = MessageBox.Show(
+            this,
+            $"'{conversation.Title}' 대화와 저장된 이미지 기록을 삭제하시겠습니까?",
+            "대화 삭제",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var deletedCurrentConversation = _currentConversation?.Id == conversationId;
+        _conversationStore.DeleteConversation(conversationId);
+
+        if (deletedCurrentConversation)
+        {
+            _currentConversation = null;
+            _currentImagePath = null;
+        }
+
+        RefreshConversationList();
+        e.Handled = true;
+    }
+
     private static bool TryGetSingleImagePath(IDataObject data, out string? imagePath)
     {
         imagePath = null;
@@ -85,56 +138,203 @@ public partial class MainWindow : Window
 
     private void StartConversation(string imagePath)
     {
-        _currentImagePath = imagePath;
-        EditorImage.Source = LoadBitmap(imagePath);
+        var conversation = _conversationStore.CreateConversation(imagePath);
+        RefreshConversationList(conversation.Id);
+    }
+
+    private void RefreshConversationList(string? selectedConversationId = null)
+    {
+        var conversations = _conversationStore.GetConversations();
+        ConversationList.Items.Clear();
+
+        if (conversations.Count == 0)
+        {
+            ConversationList.Items.Add(CreateEmptyConversationListItem());
+            ClearWorkspace();
+            return;
+        }
+
+        ListBoxItem? selectedItem = null;
+        foreach (var conversation in conversations)
+        {
+            var item = CreateConversationListItem(conversation);
+            ConversationList.Items.Add(item);
+
+            if (conversation.Id == selectedConversationId)
+            {
+                selectedItem = item;
+            }
+        }
+
+        ConversationList.SelectedItem = selectedItem ?? ConversationList.Items[0];
+    }
+
+    private ListBoxItem CreateConversationListItem(ConversationRecord conversation)
+    {
+        var thumbnail = new Image
+        {
+            Width = 54,
+            Height = 54,
+            Stretch = Stretch.UniformToFill,
+            Source = LoadBitmap(conversation.OriginalImagePath, 96),
+            Margin = new Thickness(0, 0, 10, 0)
+        };
+
+        var titlePanel = new StackPanel
+        {
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        titlePanel.Children.Add(new TextBlock
+        {
+            Text = conversation.Title,
+            FontWeight = FontWeights.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        titlePanel.Children.Add(new TextBlock
+        {
+            Text = conversation.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            Margin = new Thickness(0, 4, 0, 0),
+            Foreground = Brushes.Gray,
+            FontSize = 11
+        });
+
+        var contentGrid = new Grid();
+        contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        Grid.SetColumn(thumbnail, 0);
+        Grid.SetColumn(titlePanel, 1);
+        contentGrid.Children.Add(thumbnail);
+        contentGrid.Children.Add(titlePanel);
+
+        var deleteButton = new Button
+        {
+            Content = "삭제",
+            Tag = conversation.Id,
+            Padding = new Thickness(7, 3, 7, 3),
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        deleteButton.Click += DeleteConversationButton_Click;
+        Grid.SetColumn(deleteButton, 2);
+        contentGrid.Children.Add(deleteButton);
+
+        return new ListBoxItem
+        {
+            Tag = conversation,
+            Padding = new Thickness(8),
+            Margin = new Thickness(0, 0, 0, 4),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Content = contentGrid
+        };
+    }
+
+    private static ListBoxItem CreateEmptyConversationListItem()
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = "대화가 없습니다.",
+            FontWeight = FontWeights.SemiBold
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "새 대화에서 이미지를 선택하세요.",
+            Margin = new Thickness(0, 4, 0, 0),
+            Foreground = Brushes.Gray,
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        return new ListBoxItem
+        {
+            IsEnabled = false,
+            Padding = new Thickness(10),
+            Content = panel
+        };
+    }
+
+    private void ShowConversation(ConversationRecord conversation)
+    {
+        _currentConversation = conversation;
+        _currentImagePath = conversation.CurrentImagePath;
+
+        EditorImage.Source = LoadBitmap(conversation.CurrentImagePath);
         EditorImage.Visibility = Visibility.Visible;
         CanvasPlaceholder.Visibility = Visibility.Collapsed;
 
-        ConversationList.Items.Clear();
-        ConversationList.Items.Add(new ListBoxItem
-        {
-            IsSelected = true,
-            Padding = new Thickness(10),
-            Content = new StackPanel
-            {
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = Path.GetFileNameWithoutExtension(imagePath),
-                        FontWeight = FontWeights.SemiBold,
-                        TextTrimming = TextTrimming.CharacterEllipsis
-                    },
-                    new TextBlock
-                    {
-                        Text = "현재 작업",
-                        Margin = new Thickness(0, 4, 0, 0),
-                        Foreground = System.Windows.Media.Brushes.Gray,
-                        FontSize = 12
-                    }
-                }
-            }
-        });
-
         ChatHistoryPanel.Children.Clear();
-        ChatHistoryPanel.Children.Add(new Border
+        ChatHistoryPanel.Children.Add(CreateHistoryTextCard(
+            $"원본 이미지: {Path.GetFileName(conversation.OriginalImagePath)}",
+            Color.FromRgb(241, 243, 246)));
+
+        foreach (var edit in _conversationStore.GetEdits(conversation.Id))
         {
-            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(241, 243, 246)),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12),
-            Child = new TextBlock
+            ChatHistoryPanel.Children.Add(CreateHistoryTextCard(
+                $"{edit.Prompt}\n\n[{edit.EditMode}]  {edit.ModelId}",
+                Color.FromRgb(231, 240, 255)));
+
+            if (File.Exists(edit.OutputImagePath))
             {
-                Text = $"원본 이미지: {Path.GetFileName(imagePath)}",
-                TextWrapping = TextWrapping.Wrap
+                var resultImage = new Image
+                {
+                    Source = LoadBitmap(edit.OutputImagePath, 420),
+                    Stretch = Stretch.Uniform,
+                    MaxHeight = 260
+                };
+                ChatHistoryPanel.Children.Add(new Border
+                {
+                    Background = Brushes.White,
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(225, 228, 234)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(8),
+                    Margin = new Thickness(0, 8, 0, 4),
+                    Child = resultImage
+                });
             }
-        });
+        }
     }
 
-    private static BitmapImage LoadBitmap(string imagePath)
+    private static Border CreateHistoryTextCard(string text, Color backgroundColor)
+    {
+        return new Border
+        {
+            Background = new SolidColorBrush(backgroundColor),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12),
+            Margin = new Thickness(0, 0, 0, 8),
+            Child = new TextBlock
+            {
+                Text = text,
+                TextWrapping = TextWrapping.Wrap
+            }
+        };
+    }
+
+    private void ClearWorkspace()
+    {
+        _currentConversation = null;
+        _currentImagePath = null;
+        EditorImage.Source = null;
+        EditorImage.Visibility = Visibility.Collapsed;
+        CanvasPlaceholder.Visibility = Visibility.Visible;
+
+        ChatHistoryPanel.Children.Clear();
+        ChatHistoryPanel.Children.Add(CreateHistoryTextCard(
+            "이미지를 선택하면 편집 대화가 시작됩니다.",
+            Color.FromRgb(241, 243, 246)));
+    }
+
+    private static BitmapImage LoadBitmap(string imagePath, int decodePixelWidth = 0)
     {
         var bitmap = new BitmapImage();
         bitmap.BeginInit();
         bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        if (decodePixelWidth > 0)
+        {
+            bitmap.DecodePixelWidth = decodePixelWidth;
+        }
         bitmap.UriSource = new Uri(imagePath, UriKind.Absolute);
         bitmap.EndInit();
         bitmap.Freeze();
