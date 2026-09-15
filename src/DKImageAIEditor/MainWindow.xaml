@@ -2,12 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="DK Image AI Editor"
+        Icon="{StaticResource AppIcon}"
         Width="1500"
         Height="900"
         MinWidth="1100"
         MinHeight="700"
         Background="{StaticResource WindowBackgroundBrush}"
         AllowDrop="True"
+        Loaded="MainWindow_Loaded"
         DragOver="Window_DragOver"
         Drop="Window_Drop"
         KeyDown="Window_KeyDown">
@@ -23,6 +25,10 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="{StaticResource AppIcon}"
+                           Width="28"
+                           Height="28"
+                           Margin="0,0,8,0" />
                     <TextBlock Text="DK Image AI Editor"
                                FontSize="18"
                                FontWeight="SemiBold"
@@ -41,7 +47,7 @@
                     <Button x:Name="SettingsButton"
                             Content="설정"
                             Padding="16,7"
-                            Click="SettingsButton_Click" />
+                            Click="SettingsButtonWithRefresh_Click" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -264,12 +270,16 @@
                     <Border Padding="14,12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
                         <StackPanel>
                             <TextBlock Text="현재 대화" FontSize="16" FontWeight="SemiBold" />
-                            <TextBlock Text="수정 요청과 결과 기록" Margin="0,3,0,0" Foreground="#7A8290" FontSize="12" />
+                            <TextBlock Text="수정 요청과 결과 기록 · 텍스트 클릭 시 복사"
+                                       Margin="0,3,0,0"
+                                       Foreground="#7A8290"
+                                       FontSize="12" />
                         </StackPanel>
                     </Border>
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="12">
-                        <StackPanel x:Name="ChatHistoryPanel">
+                        <StackPanel x:Name="ChatHistoryPanel"
+                                    PreviewMouseLeftButtonUp="ChatHistoryPanel_PreviewMouseLeftButtonUp">
                             <Border Background="#F1F3F6" CornerRadius="8" Padding="12">
                                 <TextBlock Text="이미지를 선택하면 편집 대화가 시작됩니다."
                                            Foreground="#69717E"
@@ -313,16 +323,26 @@
                                      Padding="10"
                                      ToolTip="한글 자연어로 이미지 수정 내용을 입력하세요." />
 
-                            <Button x:Name="EditImageButton"
-                                    Grid.Row="3"
-                                    Content="이미지 수정"
-                                    HorizontalAlignment="Right"
-                                    Margin="0,8,0,0"
-                                    Padding="18,8"
-                                    Background="{StaticResource AccentBrush}"
-                                    Foreground="White"
-                                    BorderBrush="{StaticResource AccentBrush}"
-                                    Click="EditImageButton_Click" />
+                            <StackPanel Grid.Row="3"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Right"
+                                        Margin="0,8,0,0">
+                                <ComboBox x:Name="RequestModelComboBox"
+                                          Width="210"
+                                          Margin="0,0,8,0"
+                                          VerticalContentAlignment="Center"
+                                          DisplayMemberPath="DisplayName"
+                                          SelectedValuePath="ModelId"
+                                          IsEnabled="{Binding IsEnabled, ElementName=EditImageButton}"
+                                          ToolTip="이번 이미지 수정에 사용할 모델을 선택합니다. 설정의 기본 모델은 시작값으로 사용됩니다." />
+                                <Button x:Name="EditImageButton"
+                                        Content="이미지 수정"
+                                        Padding="18,8"
+                                        Background="{StaticResource AccentBrush}"
+                                        Foreground="White"
+                                        BorderBrush="{StaticResource AccentBrush}"
+                                        Click="EditImageWithModelButton_Click" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </Grid>
