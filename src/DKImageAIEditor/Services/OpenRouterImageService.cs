@@ -11,11 +11,85 @@ namespace DKImageAIEditor.Services;
 public sealed class OpenRouterImageService
 {
     private static readonly Uri ImagesEndpoint = new("https://openrouter.ai/api/v1/images");
+    private static readonly Uri CurrentKeyEndpoint = new("https://openrouter.ai/api/v1/key");
+    private static readonly Uri CreditsEndpoint = new("https://openrouter.ai/api/v1/credits");
     private readonly HttpClient _httpClient;
 
     public OpenRouterImageService(HttpClient? httpClient = null)
     {
         _httpClient = httpClient ?? new HttpClient();
+    }
+
+    public async Task<OpenRouterKeyBalanceStatus> GetKeyBalanceStatusAsync(
+        string apiKey,
+        CancellationToken cancellationToken = default)
+    {
+        using var keyRequest = new HttpRequestMessage(HttpMethod.Get, CurrentKeyEndpoint);
+        keyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        using var keyResponse = await _httpClient.SendAsync(keyRequest, cancellationToken);
+        var keyResponseBody = await keyResponse.Content.ReadAsStringAsync(cancellationToken);
+        if (!keyResponse.IsSuccessStatusCode)
+        {
+            throw CreateOpenRouterException(keyResponse.StatusCode, keyResponseBody);
+        }
+
+        using var keyDocument = JsonDocument.Parse(keyResponseBody);
+        if (!keyDocument.RootElement.TryGetProperty("data", out var keyData))
+        {
+            throw new InvalidOperationException("OpenRouter API Key 정보를 확인할 수 없습니다.");
+        }
+
+        var isManagementKey = TryGetBoolean(keyData, "is_management_key") ?? false;
+        var usage = TryGetDouble(keyData, "usage");
+        var limit = TryGetDouble(keyData, "limit");
+        var limitRemaining = TryGetDouble(keyData, "limit_remaining");
+        var limitReset = TryGetString(keyData, "limit_reset");
+
+        if (!isManagementKey)
+        {
+            return new OpenRouterKeyBalanceStatus(
+                false,
+                usage,
+                limit,
+                limitRemaining,
+                limitReset,
+                null,
+                null,
+                null);
+        }
+
+        using var creditsRequest = new HttpRequestMessage(HttpMethod.Get, CreditsEndpoint);
+        creditsRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        using var creditsResponse = await _httpClient.SendAsync(creditsRequest, cancellationToken);
+        var creditsResponseBody = await creditsResponse.Content.ReadAsStringAsync(cancellationToken);
+        if (!creditsResponse.IsSuccessStatusCode)
+        {
+            throw CreateOpenRouterException(creditsResponse.StatusCode, creditsResponseBody);
+        }
+
+        using var creditsDocument = JsonDocument.Parse(creditsResponseBody);
+        if (!creditsDocument.RootElement.TryGetProperty("data", out var creditsData))
+        {
+            throw new InvalidOperationException("OpenRouter 크레딧 정보를 확인할 수 없습니다.");
+        }
+
+        var totalCredits = TryGetDouble(creditsData, "total_credits");
+        var totalUsage = TryGetDouble(creditsData, "total_usage");
+        var creditBalance = totalCredits.HasValue && totalUsage.HasValue
+            ? totalCredits.Value - totalUsage.Value
+            : null;
+
+        return new OpenRouterKeyBalanceStatus(
+            true,
+            usage,
+            limit,
+            limitRemaining,
+            limitReset,
+            creditBalance,
+            totalCredits,
+            totalUsage);
     }
 
     public async Task<ImageEditResult> EditImageAsync(
@@ -94,6 +168,40 @@ public sealed class OpenRouterImageService
         return new ImageEditResult(Convert.FromBase64String(base64), mediaType);
     }
 
+    private static double? TryGetDouble(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        return property.ValueKind == JsonValueKind.Number && property.TryGetDouble(out var value)
+            ? value
+            : null;
+    }
+
+    private static bool? TryGetBoolean(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null
+        };
+    }
+
+    private static string? TryGetString(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+    }
+
     private static OpenRouterImageException CreateOpenRouterException(HttpStatusCode statusCode, string responseBody)
     {
         string? providerMessage = null;
@@ -166,6 +274,16 @@ public sealed class OpenRouterImageService
 }
 
 public sealed record ImageEditResult(byte[] ImageBytes, string MediaType);
+
+public sealed record OpenRouterKeyBalanceStatus(
+    bool IsManagementKey,
+    double? Usage,
+    double? Limit,
+    double? LimitRemaining,
+    string? LimitReset,
+    double? CreditBalance,
+    double? TotalCredits,
+    double? TotalUsage);
 
 public sealed class OpenRouterImageException : Exception
 {
