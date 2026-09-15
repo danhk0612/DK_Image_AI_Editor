@@ -273,6 +273,6 @@ public sealed class ConversationStore
 
     private static DateTimeOffset ParseDateTimeOffset(string value)
     {
-        return DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        return DateTimeOffset.Parse(value, CultureInfo.InvariantCulture);
     }
 }
