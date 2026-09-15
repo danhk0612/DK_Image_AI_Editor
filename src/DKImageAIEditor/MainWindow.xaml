@@ -9,7 +9,8 @@
         Background="{StaticResource WindowBackgroundBrush}"
         AllowDrop="True"
         DragOver="Window_DragOver"
-        Drop="Window_Drop">
+        Drop="Window_Drop"
+        KeyDown="Window_KeyDown">
     <DockPanel>
         <Border DockPanel.Dock="Top"
                 Background="{StaticResource PanelBackgroundBrush}"
@@ -99,11 +100,26 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0" ClipToBounds="True">
-                        <Image x:Name="EditorImage"
-                               Stretch="Uniform"
-                               Margin="14"
-                               Visibility="Collapsed" />
+                    <Grid x:Name="EditorSurface" Grid.Row="0" ClipToBounds="True">
+                        <Grid x:Name="ImageViewport" Margin="14" ClipToBounds="True">
+                            <Image x:Name="EditorImage"
+                                   Stretch="Uniform"
+                                   Visibility="Collapsed" />
+                            <Canvas x:Name="SelectionCanvas"
+                                    Background="Transparent"
+                                    Cursor="Cross"
+                                    IsHitTestVisible="False"
+                                    MouseLeftButtonDown="SelectionCanvas_MouseLeftButtonDown"
+                                    MouseMove="SelectionCanvas_MouseMove"
+                                    MouseLeftButtonUp="SelectionCanvas_MouseLeftButtonUp">
+                                <Rectangle x:Name="SelectionRectangle"
+                                           Visibility="Collapsed"
+                                           Stroke="#FF3B82F6"
+                                           StrokeThickness="2"
+                                           Fill="#303B82F6"
+                                           StrokeDashArray="4,2" />
+                            </Canvas>
+                        </Grid>
                         <TextBlock x:Name="CanvasPlaceholder"
                                    Text="이미지를 열거나 이 창에 드래그해 놓으세요."
                                    Foreground="#B9C0CC"
@@ -118,12 +134,36 @@
                             BorderThickness="0,1,0,0"
                             Padding="10">
                         <WrapPanel HorizontalAlignment="Center">
-                            <Button Content="전체 편집" Padding="13,6" Margin="3" />
-                            <Button Content="영역 편집" Padding="13,6" Margin="3" />
-                            <Button Content="잘라서 편집" Padding="13,6" Margin="3" />
-                            <Button Content="선택 해제" Padding="13,6" Margin="3" />
-                            <Button Content="원본 비교" Padding="13,6" Margin="3" />
-                            <Button Content="저장" Padding="13,6" Margin="3" />
+                            <Button x:Name="FullEditModeButton"
+                                    Content="전체 편집"
+                                    Padding="13,6"
+                                    Margin="3"
+                                    Click="FullEditModeButton_Click" />
+                            <Button x:Name="RegionEditModeButton"
+                                    Content="영역 편집"
+                                    Padding="13,6"
+                                    Margin="3"
+                                    Click="RegionEditModeButton_Click" />
+                            <Button x:Name="CropEditModeButton"
+                                    Content="잘라서 편집"
+                                    Padding="13,6"
+                                    Margin="3"
+                                    Click="CropEditModeButton_Click" />
+                            <Button x:Name="ClearSelectionButton"
+                                    Content="선택 해제"
+                                    Padding="13,6"
+                                    Margin="3"
+                                    Click="ClearSelectionButton_Click" />
+                            <Button x:Name="CompareOriginalButton"
+                                    Content="원본 비교"
+                                    Padding="13,6"
+                                    Margin="3"
+                                    Click="CompareOriginalButton_Click" />
+                            <Button x:Name="SaveCurrentImageButton"
+                                    Content="저장"
+                                    Padding="13,6"
+                                    Margin="3"
+                                    Click="SaveCurrentImageButton_Click" />
                         </WrapPanel>
                     </Border>
                 </Grid>
