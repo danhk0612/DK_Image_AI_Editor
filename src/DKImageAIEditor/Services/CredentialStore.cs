@@ -41,7 +41,14 @@ public static class CredentialStore
         }
         finally
         {
-            Marshal.ZeroFreeCoTaskMemUnicode(blobPointer);
+            if (blobPointer != IntPtr.Zero)
+            {
+                var zeroBytes = new byte[secretBytes.Length];
+                Marshal.Copy(zeroBytes, 0, blobPointer, zeroBytes.Length);
+                Marshal.FreeCoTaskMem(blobPointer);
+            }
+
+            Array.Clear(secretBytes, 0, secretBytes.Length);
         }
     }
 
@@ -104,6 +111,6 @@ public static class CredentialStore
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CredDelete(string target, uint type, uint flags);
 
-    [DllImport("Advapi32.dll", SetLastError = true)]
+    [DllImport("Advapi32.dll")]
     private static extern void CredFree(IntPtr buffer);
 }
