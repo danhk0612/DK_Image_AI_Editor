@@ -24,7 +24,8 @@
 - [x] 좁은 창에서 좌우 패널 자동 접기
 - [x] 최소 창 크기 860×620으로 완화
 - [-] 반응형 레이아웃 실기기 검증 대기
-- [-] EXE 아이콘 자동 생성/포함 (구현, 실기기 빌드 검증 대기)
+- [x] EXE 아이콘 자동 생성/컴파일 포함
+- [ ] EXE 아이콘 실제 표시 확인
 
 ## T03 새 이미지 대화
 
@@ -136,11 +137,16 @@
 - [x] JPG 변환 저장 (품질 95)
 - [x] 현재 결과 원본 형식 저장
 
-## T13 마무리
+## T13 마무리 / 배포
 
+- [x] 버전 0.5.0 메타데이터 적용
 - [x] Windows x64 self-contained single-file Publish 프로필
-- [x] `publish.ps1` 배포 스크립트
-- [ ] Windows x64 publish 실기기 실행 검증
+- [x] `publish.ps1` 빌드 + Publish + ZIP 패키징
+- [x] GitHub Actions main 자동 Windows 빌드/패키징
+- [x] `release:` 커밋 또는 수동 실행 시 GitHub Release 자동 생성
+- [x] GitHub Actions Windows x64 빌드/ZIP 패키징 성공 검증
+- [-] v0.5.0 GitHub Release 자동 배포 진행
+- [ ] 배포 EXE 실기기 실행 검증
 - [ ] 설정/API Key 저장 후 프로그램 재실행 검증
 - [ ] Custom 모델 테스트
 - [x] README 사용법 갱신
