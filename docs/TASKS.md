@@ -125,4 +125,4 @@
 - [ ] Windows x64 publish 실기기 실행 검증
 - [ ] 설정/API Key 저장 후 프로그램 재실행 검증
 - [ ] Custom 모델 테스트
-- [-] README 사용법 갱신
+- [x] README 사용법 갱신
