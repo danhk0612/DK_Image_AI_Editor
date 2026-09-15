@@ -18,6 +18,8 @@ public partial class MainWindow : Window
     };
 
     private readonly ConversationStore _conversationStore = new();
+    private readonly AppSettingsService _settingsService = new();
+    private readonly OpenRouterImageService _openRouterImageService = new();
     private ConversationRecord? _currentConversation;
     private string? _currentImagePath;
 
@@ -110,6 +112,88 @@ public partial class MainWindow : Window
 
         RefreshConversationList();
         e.Handled = true;
+    }
+
+    private async void EditImageButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentConversation is null || string.IsNullOrWhiteSpace(_currentImagePath))
+        {
+            MessageBox.Show(this, "먼저 편집할 이미지 대화를 선택하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var prompt = PromptTextBox.Text.Trim();
+        if (prompt.Length == 0)
+        {
+            MessageBox.Show(this, "수정 요청을 입력하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var apiKey = CredentialStore.LoadApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            MessageBox.Show(this, "설정에서 OpenRouter API Key를 입력하세요.", "OpenRouter", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var settings = _settingsService.Load();
+        var modelId = settings.EffectiveModelId;
+        var sourceImagePath = _currentImagePath;
+        var edits = _conversationStore.GetEdits(_currentConversation.Id);
+        var sequence = edits.Count + 1;
+
+        EditImageButton.IsEnabled = false;
+        EditImageButton.Content = "수정 중...";
+
+        try
+        {
+            var sourceBytes = await File.ReadAllBytesAsync(sourceImagePath);
+            var result = await _openRouterImageService.EditImageAsync(
+                apiKey,
+                modelId,
+                sourceBytes,
+                GetImageMediaType(sourceImagePath),
+                prompt);
+
+            var outputPath = _conversationStore.GetVersionImagePath(
+                _currentConversation.Id,
+                sequence,
+                GetImageExtension(result.MediaType));
+            await File.WriteAllBytesAsync(outputPath, result.ImageBytes);
+
+            var createdAt = DateTimeOffset.UtcNow;
+            _conversationStore.AddEdit(new EditRecord(
+                Guid.NewGuid().ToString("N"),
+                _currentConversation.Id,
+                sequence,
+                prompt,
+                modelId,
+                "전체 편집",
+                null,
+                null,
+                null,
+                null,
+                sourceImagePath,
+                outputPath,
+                createdAt));
+
+            PromptTextBox.Clear();
+            RefreshConversationList(_currentConversation.Id);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                exception.Message,
+                "이미지 편집 실패",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            EditImageButton.Content = "이미지 수정";
+            EditImageButton.IsEnabled = true;
+        }
     }
 
     private static bool TryGetSingleImagePath(IDataObject data, out string? imagePath)
@@ -324,6 +408,27 @@ public partial class MainWindow : Window
         ChatHistoryPanel.Children.Add(CreateHistoryTextCard(
             "이미지를 선택하면 편집 대화가 시작됩니다.",
             Color.FromRgb(241, 243, 246)));
+    }
+
+    private static string GetImageMediaType(string imagePath)
+    {
+        return Path.GetExtension(imagePath).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".bmp" => "image/bmp",
+            ".webp" => "image/webp",
+            _ => "image/png"
+        };
+    }
+
+    private static string GetImageExtension(string mediaType)
+    {
+        return mediaType.ToLowerInvariant() switch
+        {
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/webp" => ".webp",
+            _ => ".png"
+        };
     }
 
     private static BitmapImage LoadBitmap(string imagePath, int decodePixelWidth = 0)
