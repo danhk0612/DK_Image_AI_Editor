@@ -17,6 +17,7 @@ public sealed class ImageRegionService
 
         // 영역 편집은 AI가 경계 밖의 조명/색/형태를 충분히 볼 수 있도록
         // 선택 크기의 50%만큼 주변 문맥을 포함한다.
+        // 잘라서 편집은 선택 영역 그 자체만 독립 이미지로 전달한다.
         var requestRect = includeContext
             ? Expand(selection, source.PixelWidth, source.PixelHeight, 0.50)
             : selection;
@@ -25,7 +26,26 @@ public sealed class ImageRegionService
         return new PreparedRegionRequest(
             EncodePng(cropped),
             requestRect,
-            selection);
+            selection,
+            includeContext);
+    }
+
+    /// <summary>
+    /// 영역 편집은 원본 전체 이미지에 자연스럽게 합성하고,
+    /// 잘라서 편집은 AI가 반환한 독립 이미지를 그대로 PNG로 정규화해 반환한다.
+    /// </summary>
+    public byte[] ComposeResult(
+        string sourceImagePath,
+        byte[] editedRegionBytes,
+        PreparedRegionRequest request)
+    {
+        if (!request.IncludeContext)
+        {
+            // Crop 모드: 원본에 다시 붙이지 않는다.
+            return EncodePng(LoadBitmap(editedRegionBytes));
+        }
+
+        return ComposeRegionResult(sourceImagePath, editedRegionBytes, request);
     }
 
     /// <summary>
@@ -33,7 +53,7 @@ public sealed class ImageRegionService
     /// 선택 영역 밖은 원본 그대로 유지하며, 선택 영역 가장자리 안쪽에서는
     /// 원본과 편집 결과를 feather blending해 사각형 경계가 드러나지 않게 한다.
     /// </summary>
-    public byte[] ComposeRegionResult(
+    private byte[] ComposeRegionResult(
         string sourceImagePath,
         byte[] editedRegionBytes,
         PreparedRegionRequest request)
@@ -97,8 +117,7 @@ public sealed class ImageRegionService
                 // 가장자리에서는 원본 비중이 높고, feather 폭 안쪽으로 갈수록
                 // AI 편집 결과가 완전히 적용된다.
                 var alpha = Math.Clamp((distanceToEdge + 1) / (double)feather, 0.0, 1.0);
-                // 부드러운 smoothstep 곡선.
-                alpha = alpha * alpha * (3.0 - 2.0 * alpha);
+                alpha = alpha * alpha * (3.0 - 2.0 * alpha); // smoothstep
 
                 var sourceX = request.SelectionRect.X + x;
                 var sourceY = request.SelectionRect.Y + y;
@@ -239,4 +258,5 @@ public sealed class ImageRegionService
 public sealed record PreparedRegionRequest(
     byte[] RequestImageBytes,
     Int32Rect RequestRect,
-    Int32Rect SelectionRect);
+    Int32Rect SelectionRect,
+    bool IncludeContext);
