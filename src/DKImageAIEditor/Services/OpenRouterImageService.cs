@@ -1,6 +1,8 @@
+using System.IO;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Windows.Media.Imaging;
 
 namespace DKImageAIEditor.Services;
 
@@ -22,7 +24,8 @@ public sealed class OpenRouterImageService
         string prompt,
         CancellationToken cancellationToken = default)
     {
-        var sourceDataUrl = $"data:{sourceMediaType};base64,{Convert.ToBase64String(sourceImageBytes)}";
+        var normalizedSource = NormalizeSourceImage(sourceImageBytes, sourceMediaType);
+        var sourceDataUrl = $"data:{normalizedSource.MediaType};base64,{Convert.ToBase64String(normalizedSource.ImageBytes)}";
         var payload = new
         {
             model = modelId,
@@ -70,6 +73,26 @@ public sealed class OpenRouterImageService
             : "image/png";
 
         return new ImageEditResult(Convert.FromBase64String(base64), mediaType);
+    }
+
+    private static ImageEditResult NormalizeSourceImage(byte[] imageBytes, string mediaType)
+    {
+        if (!mediaType.Equals("image/bmp", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ImageEditResult(imageBytes, mediaType);
+        }
+
+        using var sourceStream = new MemoryStream(imageBytes);
+        var decoder = BitmapDecoder.Create(
+            sourceStream,
+            BitmapCreateOptions.PreservePixelFormat,
+            BitmapCacheOption.OnLoad);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(decoder.Frames[0]));
+
+        using var outputStream = new MemoryStream();
+        encoder.Save(outputStream);
+        return new ImageEditResult(outputStream.ToArray(), "image/png");
     }
 }
 
