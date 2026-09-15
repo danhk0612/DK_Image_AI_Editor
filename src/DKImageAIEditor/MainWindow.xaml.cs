@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DKImageAIEditor.Models;
@@ -21,14 +22,23 @@ public partial class MainWindow : Window
     private readonly ConversationStore _conversationStore = new();
     private readonly AppSettingsService _settingsService = new();
     private readonly OpenRouterImageService _openRouterImageService = new();
+    private readonly ImageRegionService _imageRegionService = new();
+
     private ConversationRecord? _currentConversation;
     private string? _currentImagePath;
     private bool _isBusy;
+    private bool _isSelecting;
+    private bool _showingOriginal;
+    private Point _selectionStart;
+    private Int32Rect? _selectionPixelRect;
+    private ImageEditMode _editMode = ImageEditMode.Full;
 
     public MainWindow()
     {
         InitializeComponent();
         ConversationList.SelectionChanged += ConversationList_SelectionChanged;
+        SelectionCanvas.SizeChanged += (_, _) => RenderSelectionRectangle();
+        SetEditMode(ImageEditMode.Full);
         RefreshConversationList();
     }
 
@@ -84,6 +94,15 @@ public partial class MainWindow : Window
         if (TryGetSingleImagePath(e.Data, out var imagePath))
         {
             StartConversation(imagePath!);
+        }
+    }
+
+    private void Window_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && !_isBusy)
+        {
+            ClearSelection();
+            e.Handled = true;
         }
     }
 
@@ -143,6 +162,136 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void FullEditModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetEditMode(ImageEditMode.Full);
+    }
+
+    private void RegionEditModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetEditMode(ImageEditMode.Region);
+    }
+
+    private void CropEditModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetEditMode(ImageEditMode.Crop);
+    }
+
+    private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
+    {
+        ClearSelection();
+    }
+
+    private void CompareOriginalButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy || _currentConversation is null || string.IsNullOrWhiteSpace(_currentImagePath))
+        {
+            return;
+        }
+
+        _showingOriginal = !_showingOriginal;
+        var path = _showingOriginal
+            ? _currentConversation.OriginalImagePath
+            : _currentImagePath;
+
+        EditorImage.Source = LoadBitmap(path);
+        CompareOriginalButton.Content = _showingOriginal ? "현재 보기" : "원본 비교";
+        RenderSelectionRectangle();
+    }
+
+    private void SaveCurrentImageButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy || string.IsNullOrWhiteSpace(_currentImagePath) || !File.Exists(_currentImagePath))
+        {
+            return;
+        }
+
+        var extension = Path.GetExtension(_currentImagePath);
+        var dialog = new SaveFileDialog
+        {
+            Title = "현재 이미지 저장",
+            FileName = _currentConversation?.Title + extension,
+            DefaultExt = extension,
+            Filter = $"이미지 파일|*{extension}|모든 파일|*.*"
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            File.Copy(_currentImagePath, dialog.FileName, true);
+            OperationStatusTextBlock.Text = $"저장됨: {dialog.FileName}";
+        }
+    }
+
+    private void SelectionCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_isBusy || _editMode == ImageEditMode.Full || EditorImage.Source is not BitmapSource)
+        {
+            return;
+        }
+
+        var imageRect = GetDisplayedImageRect();
+        if (imageRect.IsEmpty)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(SelectionCanvas);
+        if (!imageRect.Contains(point))
+        {
+            return;
+        }
+
+        _isSelecting = true;
+        _selectionStart = point;
+        _selectionPixelRect = null;
+        SelectionCanvas.CaptureMouse();
+        UpdateSelectionVisual(point, point);
+        e.Handled = true;
+    }
+
+    private void SelectionCanvas_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isSelecting)
+        {
+            return;
+        }
+
+        var point = ClampToRect(e.GetPosition(SelectionCanvas), GetDisplayedImageRect());
+        UpdateSelectionVisual(_selectionStart, point);
+    }
+
+    private void SelectionCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isSelecting)
+        {
+            return;
+        }
+
+        _isSelecting = false;
+        SelectionCanvas.ReleaseMouseCapture();
+
+        var imageRect = GetDisplayedImageRect();
+        var point = ClampToRect(e.GetPosition(SelectionCanvas), imageRect);
+        var selectedVisualRect = NormalizeRect(_selectionStart, point);
+
+        if (selectedVisualRect.Width < 4 || selectedVisualRect.Height < 4)
+        {
+            ClearSelection();
+            return;
+        }
+
+        _selectionPixelRect = VisualRectToPixelRect(selectedVisualRect, imageRect);
+        RenderSelectionRectangle();
+
+        if (_selectionPixelRect is { } selection)
+        {
+            OperationStatusTextBlock.Text =
+                $"선택 영역: X {selection.X}, Y {selection.Y}, {selection.Width} × {selection.Height}px";
+        }
+
+        e.Handled = true;
+    }
+
     private async void EditImageButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isBusy)
@@ -153,6 +302,17 @@ public partial class MainWindow : Window
         if (_currentConversation is null || string.IsNullOrWhiteSpace(_currentImagePath))
         {
             MessageBox.Show(this, "먼저 편집할 이미지 대화를 선택하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (_editMode != ImageEditMode.Full && _selectionPixelRect is null)
+        {
+            MessageBox.Show(
+                this,
+                "이미지에서 수정할 영역을 마우스로 드래그해 선택하세요.",
+                "영역 선택 필요",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
             return;
         }
 
@@ -177,29 +337,72 @@ public partial class MainWindow : Window
         var edits = _conversationStore.GetEdits(conversationId);
         var sequence = edits.Count + 1;
         var stopwatch = Stopwatch.StartNew();
+        var editMode = _editMode;
+        var selection = _selectionPixelRect;
 
         SetOperationState(true, "요청 준비 중...");
         await Task.Yield();
 
         try
         {
-            await UpdateOperationStatusAsync("원본 이미지를 읽는 중...");
-            var sourceBytes = await File.ReadAllBytesAsync(sourceImagePath);
+            byte[] requestBytes;
+            string requestMediaType;
+            PreparedRegionRequest? preparedRegion = null;
+            string requestPrompt = prompt;
+
+            if (editMode == ImageEditMode.Full)
+            {
+                await UpdateOperationStatusAsync("원본 이미지를 읽는 중...");
+                requestBytes = await File.ReadAllBytesAsync(sourceImagePath);
+                requestMediaType = GetImageMediaType(sourceImagePath);
+            }
+            else
+            {
+                await UpdateOperationStatusAsync(
+                    editMode == ImageEditMode.Region
+                        ? "선택 영역과 주변 문맥을 준비하는 중..."
+                        : "선택 영역을 잘라내는 중...");
+
+                preparedRegion = _imageRegionService.PrepareRequest(
+                    sourceImagePath,
+                    selection!.Value,
+                    editMode == ImageEditMode.Region);
+                requestBytes = preparedRegion.RequestImageBytes;
+                requestMediaType = "image/png";
+                requestPrompt = BuildRegionPrompt(prompt, preparedRegion, editMode);
+            }
 
             await UpdateOperationStatusAsync($"OpenRouter 응답 대기 중... ({modelId})");
             var result = await _openRouterImageService.EditImageAsync(
                 apiKey,
                 modelId,
-                sourceBytes,
-                GetImageMediaType(sourceImagePath),
-                prompt);
+                requestBytes,
+                requestMediaType,
+                requestPrompt);
 
-            await UpdateOperationStatusAsync("결과 이미지를 저장하는 중...");
+            await UpdateOperationStatusAsync("결과 이미지를 합성하고 저장하는 중...");
+            byte[] outputBytes;
+            string outputExtension;
+
+            if (preparedRegion is null)
+            {
+                outputBytes = result.ImageBytes;
+                outputExtension = GetImageExtension(result.MediaType);
+            }
+            else
+            {
+                outputBytes = _imageRegionService.ComposeResult(
+                    sourceImagePath,
+                    result.ImageBytes,
+                    preparedRegion);
+                outputExtension = ".png";
+            }
+
             var outputPath = _conversationStore.GetVersionImagePath(
                 conversationId,
                 sequence,
-                GetImageExtension(result.MediaType));
-            await File.WriteAllBytesAsync(outputPath, result.ImageBytes);
+                outputExtension);
+            await File.WriteAllBytesAsync(outputPath, outputBytes);
 
             await UpdateOperationStatusAsync("편집 기록을 저장하는 중...");
             var createdAt = DateTimeOffset.UtcNow;
@@ -209,17 +412,20 @@ public partial class MainWindow : Window
                 sequence,
                 prompt,
                 modelId,
-                "전체 편집",
-                null,
-                null,
-                null,
-                null,
+                GetEditModeDisplayName(editMode),
+                selection?.X,
+                selection?.Y,
+                selection?.Width,
+                selection?.Height,
                 sourceImagePath,
                 outputPath,
                 createdAt));
 
             await UpdateOperationStatusAsync("화면을 갱신하는 중...");
             PromptTextBox.Clear();
+            ClearSelection(false);
+            _showingOriginal = false;
+            CompareOriginalButton.Content = "원본 비교";
 
             _isBusy = false;
             RefreshConversationList(conversationId);
@@ -241,6 +447,30 @@ public partial class MainWindow : Window
         }
     }
 
+    private static string BuildRegionPrompt(
+        string userPrompt,
+        PreparedRegionRequest request,
+        ImageEditMode mode)
+    {
+        if (mode == ImageEditMode.Crop)
+        {
+            return $"수정 대상은 첨부된 이미지 전체입니다. 요청한 수정만 수행하고 가능한 한 기존 구도와 스타일을 유지하세요.\n\n사용자 요청:\n{userPrompt}";
+        }
+
+        var relativeX = request.SelectionRect.X - request.RequestRect.X;
+        var relativeY = request.SelectionRect.Y - request.RequestRect.Y;
+
+        return $"""
+            첨부 이미지는 원본의 일부이며 주변 문맥을 포함합니다.
+            실제 수정 대상은 다음 사각형 영역입니다.
+            X={relativeX}, Y={relativeY}, Width={request.SelectionRect.Width}, Height={request.SelectionRect.Height} 픽셀.
+            이 대상 영역만 사용자 요청대로 수정하고 대상 밖의 주변 문맥은 최대한 유지하세요.
+
+            사용자 요청:
+            {userPrompt}
+            """;
+    }
+
     private void SetOperationState(bool isBusy, string statusMessage)
     {
         _isBusy = isBusy;
@@ -253,12 +483,159 @@ public partial class MainWindow : Window
         ConversationList.IsEnabled = !isBusy;
         NewConversationButton.IsEnabled = !isBusy;
         SettingsButton.IsEnabled = !isBusy;
+        FullEditModeButton.IsEnabled = !isBusy;
+        RegionEditModeButton.IsEnabled = !isBusy;
+        CropEditModeButton.IsEnabled = !isBusy;
+        ClearSelectionButton.IsEnabled = !isBusy;
+        CompareOriginalButton.IsEnabled = !isBusy;
+        SaveCurrentImageButton.IsEnabled = !isBusy;
+        SelectionCanvas.IsHitTestVisible = !isBusy && _editMode != ImageEditMode.Full;
     }
 
     private async Task UpdateOperationStatusAsync(string statusMessage)
     {
         OperationStatusTextBlock.Text = statusMessage;
         await Task.Yield();
+    }
+
+    private void SetEditMode(ImageEditMode mode)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        _editMode = mode;
+        SelectionCanvas.IsHitTestVisible = mode != ImageEditMode.Full;
+        SelectionCanvas.Cursor = mode == ImageEditMode.Full ? Cursors.Arrow : Cursors.Cross;
+
+        FullEditModeButton.FontWeight = mode == ImageEditMode.Full ? FontWeights.Bold : FontWeights.Normal;
+        RegionEditModeButton.FontWeight = mode == ImageEditMode.Region ? FontWeights.Bold : FontWeights.Normal;
+        CropEditModeButton.FontWeight = mode == ImageEditMode.Crop ? FontWeights.Bold : FontWeights.Normal;
+
+        OperationStatusTextBlock.Text = mode switch
+        {
+            ImageEditMode.Full => "전체 편집 모드: 이미지 전체가 수정 대상입니다.",
+            ImageEditMode.Region => "영역 편집 모드: 이미지에서 수정할 부분을 사각형으로 드래그하세요.",
+            ImageEditMode.Crop => "잘라서 편집 모드: AI에 보낼 영역을 사각형으로 드래그하세요.",
+            _ => "준비됨"
+        };
+    }
+
+    private void ClearSelection(bool updateStatus = true)
+    {
+        _selectionPixelRect = null;
+        _isSelecting = false;
+        SelectionCanvas.ReleaseMouseCapture();
+        SelectionRectangle.Visibility = Visibility.Collapsed;
+
+        if (updateStatus)
+        {
+            SetEditMode(_editMode);
+        }
+    }
+
+    private Rect GetDisplayedImageRect()
+    {
+        if (EditorImage.Source is not BitmapSource bitmap ||
+            SelectionCanvas.ActualWidth <= 0 || SelectionCanvas.ActualHeight <= 0)
+        {
+            return Rect.Empty;
+        }
+
+        var scale = Math.Min(
+            SelectionCanvas.ActualWidth / bitmap.PixelWidth,
+            SelectionCanvas.ActualHeight / bitmap.PixelHeight);
+        var width = bitmap.PixelWidth * scale;
+        var height = bitmap.PixelHeight * scale;
+        var left = (SelectionCanvas.ActualWidth - width) / 2.0;
+        var top = (SelectionCanvas.ActualHeight - height) / 2.0;
+        return new Rect(left, top, width, height);
+    }
+
+    private Int32Rect VisualRectToPixelRect(Rect visualRect, Rect displayedImageRect)
+    {
+        if (EditorImage.Source is not BitmapSource bitmap)
+        {
+            return Int32Rect.Empty;
+        }
+
+        var scaleX = bitmap.PixelWidth / displayedImageRect.Width;
+        var scaleY = bitmap.PixelHeight / displayedImageRect.Height;
+
+        var x = Math.Clamp(
+            (int)Math.Round((visualRect.Left - displayedImageRect.Left) * scaleX),
+            0,
+            bitmap.PixelWidth - 1);
+        var y = Math.Clamp(
+            (int)Math.Round((visualRect.Top - displayedImageRect.Top) * scaleY),
+            0,
+            bitmap.PixelHeight - 1);
+        var width = Math.Max(1, (int)Math.Round(visualRect.Width * scaleX));
+        var height = Math.Max(1, (int)Math.Round(visualRect.Height * scaleY));
+
+        width = Math.Min(width, bitmap.PixelWidth - x);
+        height = Math.Min(height, bitmap.PixelHeight - y);
+        return new Int32Rect(x, y, width, height);
+    }
+
+    private void RenderSelectionRectangle()
+    {
+        if (_selectionPixelRect is not { } selection ||
+            EditorImage.Source is not BitmapSource bitmap)
+        {
+            SelectionRectangle.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var imageRect = GetDisplayedImageRect();
+        if (imageRect.IsEmpty)
+        {
+            return;
+        }
+
+        var scaleX = imageRect.Width / bitmap.PixelWidth;
+        var scaleY = imageRect.Height / bitmap.PixelHeight;
+        var visualRect = new Rect(
+            imageRect.Left + selection.X * scaleX,
+            imageRect.Top + selection.Y * scaleY,
+            selection.Width * scaleX,
+            selection.Height * scaleY);
+
+        Canvas.SetLeft(SelectionRectangle, visualRect.Left);
+        Canvas.SetTop(SelectionRectangle, visualRect.Top);
+        SelectionRectangle.Width = visualRect.Width;
+        SelectionRectangle.Height = visualRect.Height;
+        SelectionRectangle.Visibility = Visibility.Visible;
+    }
+
+    private void UpdateSelectionVisual(Point start, Point end)
+    {
+        var rect = NormalizeRect(start, end);
+        Canvas.SetLeft(SelectionRectangle, rect.Left);
+        Canvas.SetTop(SelectionRectangle, rect.Top);
+        SelectionRectangle.Width = rect.Width;
+        SelectionRectangle.Height = rect.Height;
+        SelectionRectangle.Visibility = Visibility.Visible;
+    }
+
+    private static Rect NormalizeRect(Point a, Point b)
+    {
+        return new Rect(
+            new Point(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y)),
+            new Point(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
+    }
+
+    private static Point ClampToRect(Point point, Rect rect)
+    {
+        if (rect.IsEmpty)
+        {
+            return point;
+        }
+
+        return new Point(
+            Math.Clamp(point.X, rect.Left, rect.Right),
+            Math.Clamp(point.Y, rect.Top, rect.Bottom));
     }
 
     private static bool TryGetSingleImagePath(IDataObject data, out string? imagePath)
@@ -320,12 +697,18 @@ public partial class MainWindow : Window
 
     private ListBoxItem CreateConversationListItem(ConversationRecord conversation)
     {
+        var edits = _conversationStore.GetEdits(conversation.Id);
+        var latestEdit = edits.LastOrDefault();
+        var thumbnailPath = File.Exists(conversation.CurrentImagePath)
+            ? conversation.CurrentImagePath
+            : conversation.OriginalImagePath;
+
         var thumbnail = new Image
         {
             Width = 54,
             Height = 54,
             Stretch = Stretch.UniformToFill,
-            Source = LoadBitmap(conversation.OriginalImagePath, 96),
+            Source = LoadBitmap(thumbnailPath, 96),
             Margin = new Thickness(0, 0, 10, 0)
         };
 
@@ -341,10 +724,21 @@ public partial class MainWindow : Window
         });
         titlePanel.Children.Add(new TextBlock
         {
+            Text = latestEdit is null
+                ? "아직 편집 요청이 없습니다."
+                : latestEdit.Prompt.ReplaceLineEndings(" "),
+            Margin = new Thickness(0, 3, 0, 0),
+            Foreground = Brushes.DimGray,
+            FontSize = 11,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 125
+        });
+        titlePanel.Children.Add(new TextBlock
+        {
             Text = conversation.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 3, 0, 0),
             Foreground = Brushes.Gray,
-            FontSize = 11
+            FontSize = 10
         });
 
         var contentGrid = new Grid();
@@ -407,6 +801,9 @@ public partial class MainWindow : Window
     {
         _currentConversation = conversation;
         _currentImagePath = conversation.CurrentImagePath;
+        _showingOriginal = false;
+        CompareOriginalButton.Content = "원본 비교";
+        ClearSelection(false);
 
         EditorImage.Source = LoadBitmap(conversation.CurrentImagePath);
         EditorImage.Visibility = Visibility.Visible;
@@ -443,6 +840,8 @@ public partial class MainWindow : Window
                 });
             }
         }
+
+        SetEditMode(_editMode);
     }
 
     private static Border CreateHistoryTextCard(string text, Color backgroundColor)
@@ -465,14 +864,27 @@ public partial class MainWindow : Window
     {
         _currentConversation = null;
         _currentImagePath = null;
+        _showingOriginal = false;
         EditorImage.Source = null;
         EditorImage.Visibility = Visibility.Collapsed;
         CanvasPlaceholder.Visibility = Visibility.Visible;
+        CompareOriginalButton.Content = "원본 비교";
+        ClearSelection(false);
 
         ChatHistoryPanel.Children.Clear();
         ChatHistoryPanel.Children.Add(CreateHistoryTextCard(
             "이미지를 선택하면 편집 대화가 시작됩니다.",
             Color.FromRgb(241, 243, 246)));
+    }
+
+    private static string GetEditModeDisplayName(ImageEditMode mode)
+    {
+        return mode switch
+        {
+            ImageEditMode.Region => "영역 편집",
+            ImageEditMode.Crop => "잘라서 편집",
+            _ => "전체 편집"
+        };
     }
 
     private static string GetImageMediaType(string imagePath)
