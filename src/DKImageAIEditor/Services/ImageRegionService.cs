@@ -31,33 +31,21 @@ public sealed class ImageRegionService
     }
 
     /// <summary>
-    /// 영역 편집은 원본 전체 이미지에 자연스럽게 합성하고,
-    /// 잘라서 편집은 AI가 반환한 독립 이미지를 그대로 PNG로 정규화해 반환한다.
+    /// 영역 편집 결과를 원본 전체 이미지에 합성한다.
+    /// 선택 영역 밖은 원본 그대로 유지하며, 선택 영역 가장자리 안쪽에서는
+    /// 원본과 편집 결과를 feather blending해 사각형 경계가 드러나지 않게 한다.
+    /// 잘라서 편집에서는 이 메서드를 호출하지 않는다.
     /// </summary>
-    public byte[] ComposeResult(
+    public byte[] ComposeRegionResult(
         string sourceImagePath,
         byte[] editedRegionBytes,
         PreparedRegionRequest request)
     {
         if (!request.IncludeContext)
         {
-            // Crop 모드: 원본에 다시 붙이지 않는다.
-            return EncodePng(LoadBitmap(editedRegionBytes));
+            throw new InvalidOperationException("잘라서 편집 결과는 원본에 합성할 수 없습니다.");
         }
 
-        return ComposeRegionResult(sourceImagePath, editedRegionBytes, request);
-    }
-
-    /// <summary>
-    /// 영역 편집 결과를 원본 전체 이미지에 합성한다.
-    /// 선택 영역 밖은 원본 그대로 유지하며, 선택 영역 가장자리 안쪽에서는
-    /// 원본과 편집 결과를 feather blending해 사각형 경계가 드러나지 않게 한다.
-    /// </summary>
-    private byte[] ComposeRegionResult(
-        string sourceImagePath,
-        byte[] editedRegionBytes,
-        PreparedRegionRequest request)
-    {
         var source = ConvertToBgra32(LoadBitmap(sourceImagePath));
         var editedRegion = LoadBitmap(editedRegionBytes);
 
@@ -114,10 +102,8 @@ public sealed class ImageRegionService
                     Math.Min(x, request.SelectionRect.Width - 1 - x),
                     Math.Min(y, request.SelectionRect.Height - 1 - y));
 
-                // 가장자리에서는 원본 비중이 높고, feather 폭 안쪽으로 갈수록
-                // AI 편집 결과가 완전히 적용된다.
                 var alpha = Math.Clamp((distanceToEdge + 1) / (double)feather, 0.0, 1.0);
-                alpha = alpha * alpha * (3.0 - 2.0 * alpha); // smoothstep
+                alpha = alpha * alpha * (3.0 - 2.0 * alpha);
 
                 var sourceX = request.SelectionRect.X + x;
                 var sourceY = request.SelectionRect.Y + y;
