@@ -3,6 +3,7 @@ bin/
 obj/
 artifacts/
 dist/
+src/DKImageAIEditor/DKImageAIEditor.ico
 
 # Visual Studio
 .vs/
