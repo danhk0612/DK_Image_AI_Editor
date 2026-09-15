@@ -175,11 +175,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        ClearSelection(false);
         _showingOriginal = !_showingOriginal;
         var path = _showingOriginal ? _currentConversation.OriginalImagePath : _currentImagePath;
         EditorImage.Source = LoadBitmap(path);
         CompareOriginalButton.Content = _showingOriginal ? "현재 보기" : "원본 비교";
-        RenderSelectionRectangle();
+        OperationStatusTextBlock.Text = _showingOriginal
+            ? "최초 원본을 비교 표시 중입니다. 선택 영역을 초기화했습니다."
+            : "현재 작업 이미지로 돌아왔습니다. 선택 영역을 초기화했습니다.";
     }
 
     private void SaveCurrentImageButton_Click(object sender, RoutedEventArgs e)
@@ -189,20 +192,52 @@ public partial class MainWindow : Window
             return;
         }
 
-        var extension = Path.GetExtension(_currentImagePath);
+        var sourceExtension = Path.GetExtension(_currentImagePath).ToLowerInvariant();
         var dialog = new SaveFileDialog
         {
             Title = "현재 이미지 저장",
-            FileName = $"DKImageAIEditor{extension}",
-            DefaultExt = extension,
-            Filter = $"이미지 파일|*{extension}|모든 파일|*.*"
+            FileName = "DKImageAIEditor",
+            DefaultExt = ".png",
+            AddExtension = true,
+            Filter = $"PNG 이미지|*.png|JPEG 이미지|*.jpg;*.jpeg|현재 형식 ({sourceExtension})|*{sourceExtension}",
+            FilterIndex = sourceExtension is ".jpg" or ".jpeg" ? 2 : 1
         };
 
-        if (dialog.ShowDialog(this) == true)
+        if (dialog.ShowDialog(this) != true)
         {
-            File.Copy(_currentImagePath, dialog.FileName, true);
-            OperationStatusTextBlock.Text = $"저장됨: {dialog.FileName}";
+            return;
         }
+
+        if (dialog.FilterIndex == 3)
+        {
+            var outputPath = Path.ChangeExtension(dialog.FileName, sourceExtension);
+            File.Copy(_currentImagePath, outputPath, true);
+            OperationStatusTextBlock.Text = $"저장됨: {outputPath}";
+            return;
+        }
+
+        var targetExtension = dialog.FilterIndex == 2 ? ".jpg" : ".png";
+        var targetPath = Path.ChangeExtension(dialog.FileName, targetExtension);
+        SaveConvertedImage(_currentImagePath, targetPath, targetExtension);
+        OperationStatusTextBlock.Text = $"저장됨: {targetPath}";
+    }
+
+    private static void SaveConvertedImage(string sourcePath, string targetPath, string targetExtension)
+    {
+        using var input = File.OpenRead(sourcePath);
+        var decoder = BitmapDecoder.Create(
+            input,
+            BitmapCreateOptions.PreservePixelFormat,
+            BitmapCacheOption.OnLoad);
+        var frame = decoder.Frames[0];
+
+        BitmapEncoder encoder = targetExtension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+            ? new JpegBitmapEncoder { QualityLevel = 95 }
+            : new PngBitmapEncoder();
+
+        encoder.Frames.Add(BitmapFrame.Create(frame));
+        using var output = File.Create(targetPath);
+        encoder.Save(output);
     }
 
     private void EditorSurface_MouseWheel(object sender, MouseWheelEventArgs e)
