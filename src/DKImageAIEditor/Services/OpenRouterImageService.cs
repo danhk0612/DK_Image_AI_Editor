@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -55,25 +56,92 @@ public sealed class OpenRouterImageService
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(
-                $"OpenRouter 요청 실패 ({(int)response.StatusCode} {response.ReasonPhrase})\n{responseBody}");
+            throw CreateOpenRouterException(response.StatusCode, responseBody);
         }
 
         using var document = JsonDocument.Parse(responseBody);
-        var data = document.RootElement.GetProperty("data");
-        if (data.GetArrayLength() == 0)
+        if (!document.RootElement.TryGetProperty("data", out var data) || data.GetArrayLength() == 0)
         {
-            throw new InvalidOperationException("OpenRouter 응답에 이미지가 없습니다.");
+            throw new OpenRouterImageException(
+                response.StatusCode,
+                "OpenRouter 응답에 이미지가 없습니다.",
+                null,
+                null,
+                null,
+                responseBody);
         }
 
         var image = data[0];
-        var base64 = image.GetProperty("b64_json").GetString()
-                     ?? throw new InvalidOperationException("OpenRouter 이미지 데이터가 비어 있습니다.");
+        var base64 = image.TryGetProperty("b64_json", out var base64Element)
+            ? base64Element.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(base64))
+        {
+            throw new OpenRouterImageException(
+                response.StatusCode,
+                "OpenRouter 이미지 데이터가 비어 있습니다.",
+                null,
+                null,
+                null,
+                responseBody);
+        }
+
         var mediaType = image.TryGetProperty("media_type", out var mediaTypeElement)
             ? mediaTypeElement.GetString() ?? "image/png"
             : "image/png";
 
         return new ImageEditResult(Convert.FromBase64String(base64), mediaType);
+    }
+
+    private static OpenRouterImageException CreateOpenRouterException(HttpStatusCode statusCode, string responseBody)
+    {
+        string? providerMessage = null;
+        string? providerName = null;
+        string? finishReason = null;
+        string? blockReason = null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            if (document.RootElement.TryGetProperty("error", out var errorElement))
+            {
+                if (errorElement.TryGetProperty("message", out var messageElement))
+                {
+                    providerMessage = messageElement.GetString();
+                }
+
+                if (errorElement.TryGetProperty("metadata", out var metadataElement))
+                {
+                    if (metadataElement.TryGetProperty("provider_name", out var providerElement))
+                    {
+                        providerName = providerElement.GetString();
+                    }
+
+                    if (metadataElement.TryGetProperty("finish_reason", out var finishElement))
+                    {
+                        finishReason = finishElement.GetString();
+                    }
+
+                    if (metadataElement.TryGetProperty("block_reason", out var blockElement))
+                    {
+                        blockReason = blockElement.GetString();
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // 구조화되지 않은 응답은 아래 RawResponse로만 보존한다.
+        }
+
+        return new OpenRouterImageException(
+            statusCode,
+            providerMessage,
+            providerName,
+            finishReason,
+            blockReason,
+            responseBody);
     }
 
     private static ImageEditResult NormalizeSourceImage(byte[] imageBytes, string mediaType)
@@ -98,3 +166,34 @@ public sealed class OpenRouterImageService
 }
 
 public sealed record ImageEditResult(byte[] ImageBytes, string MediaType);
+
+public sealed class OpenRouterImageException : Exception
+{
+    public OpenRouterImageException(
+        HttpStatusCode statusCode,
+        string? providerMessage,
+        string? providerName,
+        string? finishReason,
+        string? blockReason,
+        string rawResponse)
+        : base(providerMessage ?? $"OpenRouter 요청 실패 ({(int)statusCode})")
+    {
+        StatusCode = statusCode;
+        ProviderMessage = providerMessage;
+        ProviderName = providerName;
+        FinishReason = finishReason;
+        BlockReason = blockReason;
+        RawResponse = rawResponse;
+    }
+
+    public HttpStatusCode StatusCode { get; }
+    public string? ProviderMessage { get; }
+    public string? ProviderName { get; }
+    public string? FinishReason { get; }
+    public string? BlockReason { get; }
+    public string RawResponse { get; }
+
+    public bool IsImageSafetyBlock =>
+        string.Equals(BlockReason, "IMAGE_SAFETY", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(FinishReason, "IMAGE_SAFETY", StringComparison.OrdinalIgnoreCase);
+}
