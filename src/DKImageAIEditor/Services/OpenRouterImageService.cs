@@ -132,7 +132,7 @@ public sealed class OpenRouterImageService
         }
         catch (JsonException)
         {
-            // 구조화되지 않은 응답은 아래 RawResponse로만 보존한다.
+            // 구조화되지 않은 응답은 RawResponse로 보존한다.
         }
 
         return new OpenRouterImageException(
@@ -176,7 +176,7 @@ public sealed class OpenRouterImageException : Exception
         string? finishReason,
         string? blockReason,
         string rawResponse)
-        : base(providerMessage ?? $"OpenRouter 요청 실패 ({(int)statusCode})")
+        : base(BuildFriendlyMessage(statusCode, providerMessage, providerName, finishReason, blockReason))
     {
         StatusCode = statusCode;
         ProviderMessage = providerMessage;
@@ -196,4 +196,62 @@ public sealed class OpenRouterImageException : Exception
     public bool IsImageSafetyBlock =>
         string.Equals(BlockReason, "IMAGE_SAFETY", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(FinishReason, "IMAGE_SAFETY", StringComparison.OrdinalIgnoreCase);
+
+    private static string BuildFriendlyMessage(
+        HttpStatusCode statusCode,
+        string? providerMessage,
+        string? providerName,
+        string? finishReason,
+        string? blockReason)
+    {
+        var isSafetyBlock =
+            string.Equals(blockReason, "IMAGE_SAFETY", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(finishReason, "IMAGE_SAFETY", StringComparison.OrdinalIgnoreCase);
+
+        if (isSafetyBlock)
+        {
+            return
+                "현재 이미지 또는 수정 요청이 모델의 안전정책에 의해 차단되었습니다.\n\n" +
+                $"공급자: {providerName ?? "알 수 없음"}\n" +
+                $"차단 사유: {blockReason ?? finishReason ?? "IMAGE_SAFETY"}\n\n" +
+                "프롬프트 표현을 조정하거나 다른 이미지 편집 모델로 다시 시도하세요.";
+        }
+
+        if (statusCode == HttpStatusCode.Unauthorized || statusCode == HttpStatusCode.Forbidden)
+        {
+            return
+                "OpenRouter 인증에 실패했습니다.\n\n" +
+                "설정 창의 API Key가 올바른지 확인하세요.";
+        }
+
+        if ((int)statusCode == 402)
+        {
+            return
+                "OpenRouter 크레딧 또는 결제 상태 때문에 요청을 처리할 수 없습니다.\n\n" +
+                "OpenRouter 계정의 사용 가능 크레딧을 확인하세요.";
+        }
+
+        if ((int)statusCode == 429)
+        {
+            return
+                "요청 한도에 도달했거나 모델 공급자가 일시적으로 요청을 제한했습니다.\n\n" +
+                "잠시 후 다시 시도하거나 다른 모델을 선택하세요.";
+        }
+
+        if ((int)statusCode >= 500)
+        {
+            return
+                "OpenRouter 또는 모델 공급자에서 일시적인 서버 오류가 발생했습니다.\n\n" +
+                "잠시 후 다시 시도하세요.";
+        }
+
+        var detail = string.IsNullOrWhiteSpace(providerMessage)
+            ? "상세 메시지가 제공되지 않았습니다."
+            : providerMessage.Trim();
+
+        return
+            $"OpenRouter 요청을 처리하지 못했습니다. ({(int)statusCode})\n\n" +
+            $"공급자: {providerName ?? "알 수 없음"}\n" +
+            $"내용: {detail}";
+    }
 }
