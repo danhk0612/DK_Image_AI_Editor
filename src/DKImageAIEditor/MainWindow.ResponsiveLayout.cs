@@ -64,6 +64,7 @@ public partial class MainWindow
         _responsiveLayoutInitialized = true;
 
         ApplyResponsiveLayout(ActualWidth);
+        InitializeOpenRouterBalanceDisplay();
     }
 
     private Grid? FindMainBodyGrid()
@@ -119,6 +120,16 @@ public partial class MainWindow
 
         var headerButtonStyle = TryFindResource("HeaderButtonStyle") as Style;
 
+        _openRouterBalanceTextBlock = new TextBlock
+        {
+            Text = "OpenRouter: 확인 중...",
+            Foreground = new SolidColorBrush(Color.FromRgb(204, 214, 227)),
+            FontSize = 11,
+            Margin = new Thickness(0, 0, 12, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "현재 설정된 OpenRouter API Key의 사용량/잔여 한도"
+        };
+
         _leftPanelToggleButton = new Button
         {
             Content = "☰  대화",
@@ -143,6 +154,7 @@ public partial class MainWindow
         }
         _rightPanelToggleButton.Click += RightPanelToggleButton_Click;
 
+        headerActions.Children.Add(_openRouterBalanceTextBlock);
         headerActions.Children.Add(_leftPanelToggleButton);
         headerActions.Children.Add(_rightPanelToggleButton);
         headerActions.Children.Add(SettingsButton);
