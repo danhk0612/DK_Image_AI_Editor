@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -69,10 +70,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var settingsWindow = new SettingsWindow
-        {
-            Owner = this
-        };
+        var settingsWindow = new SettingsWindow { Owner = this };
         settingsWindow.ShowDialog();
     }
 
@@ -86,12 +84,7 @@ public partial class MainWindow : Window
 
     private void Window_Drop(object sender, DragEventArgs e)
     {
-        if (_isBusy)
-        {
-            return;
-        }
-
-        if (TryGetSingleImagePath(e.Data, out var imagePath))
+        if (!_isBusy && TryGetSingleImagePath(e.Data, out var imagePath))
         {
             StartConversation(imagePath!);
         }
@@ -121,12 +114,7 @@ public partial class MainWindow : Window
 
     private void DeleteConversationButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isBusy)
-        {
-            return;
-        }
-
-        if (sender is not Button { Tag: string conversationId })
+        if (_isBusy || sender is not Button { Tag: string conversationId })
         {
             return;
         }
@@ -139,7 +127,7 @@ public partial class MainWindow : Window
 
         var result = MessageBox.Show(
             this,
-            $"'{conversation.Title}' 대화와 저장된 이미지 기록을 삭제하시겠습니까?",
+            "이 대화와 저장된 이미지 기록을 삭제하시겠습니까?",
             "대화 삭제",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
@@ -162,25 +150,10 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void FullEditModeButton_Click(object sender, RoutedEventArgs e)
-    {
-        SetEditMode(ImageEditMode.Full);
-    }
-
-    private void RegionEditModeButton_Click(object sender, RoutedEventArgs e)
-    {
-        SetEditMode(ImageEditMode.Region);
-    }
-
-    private void CropEditModeButton_Click(object sender, RoutedEventArgs e)
-    {
-        SetEditMode(ImageEditMode.Crop);
-    }
-
-    private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
-    {
-        ClearSelection();
-    }
+    private void FullEditModeButton_Click(object sender, RoutedEventArgs e) => SetEditMode(ImageEditMode.Full);
+    private void RegionEditModeButton_Click(object sender, RoutedEventArgs e) => SetEditMode(ImageEditMode.Region);
+    private void CropEditModeButton_Click(object sender, RoutedEventArgs e) => SetEditMode(ImageEditMode.Crop);
+    private void ClearSelectionButton_Click(object sender, RoutedEventArgs e) => ClearSelection();
 
     private void CompareOriginalButton_Click(object sender, RoutedEventArgs e)
     {
@@ -190,10 +163,7 @@ public partial class MainWindow : Window
         }
 
         _showingOriginal = !_showingOriginal;
-        var path = _showingOriginal
-            ? _currentConversation.OriginalImagePath
-            : _currentImagePath;
-
+        var path = _showingOriginal ? _currentConversation.OriginalImagePath : _currentImagePath;
         EditorImage.Source = LoadBitmap(path);
         CompareOriginalButton.Content = _showingOriginal ? "현재 보기" : "원본 비교";
         RenderSelectionRectangle();
@@ -210,7 +180,7 @@ public partial class MainWindow : Window
         var dialog = new SaveFileDialog
         {
             Title = "현재 이미지 저장",
-            FileName = _currentConversation?.Title + extension,
+            FileName = $"DKImageAIEditor{extension}",
             DefaultExt = extension,
             Filter = $"이미지 파일|*{extension}|모든 파일|*.*"
         };
@@ -251,13 +221,10 @@ public partial class MainWindow : Window
 
     private void SelectionCanvas_MouseMove(object sender, MouseEventArgs e)
     {
-        if (!_isSelecting)
+        if (_isSelecting)
         {
-            return;
+            UpdateSelectionVisual(_selectionStart, ClampToRect(e.GetPosition(SelectionCanvas), GetDisplayedImageRect()));
         }
-
-        var point = ClampToRect(e.GetPosition(SelectionCanvas), GetDisplayedImageRect());
-        UpdateSelectionVisual(_selectionStart, point);
     }
 
     private void SelectionCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -294,35 +261,80 @@ public partial class MainWindow : Window
 
     private async void EditImageButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isBusy)
+        if (_isBusy || _currentConversation is null || string.IsNullOrWhiteSpace(_currentImagePath))
         {
-            return;
-        }
-
-        if (_currentConversation is null || string.IsNullOrWhiteSpace(_currentImagePath))
-        {
-            MessageBox.Show(this, "먼저 편집할 이미지 대화를 선택하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (!_isBusy)
+            {
+                MessageBox.Show(this, "먼저 편집할 이미지 대화를 선택하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
             return;
         }
 
         if (_editMode != ImageEditMode.Full && _selectionPixelRect is null)
         {
-            MessageBox.Show(
-                this,
-                "이미지에서 수정할 영역을 마우스로 드래그해 선택하세요.",
-                "영역 선택 필요",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            MessageBox.Show(this, "이미지에서 수정할 영역을 마우스로 드래그해 선택하세요.", "영역 선택 필요", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
-        var prompt = PromptTextBox.Text.Trim();
+        var prompt = NormalizePrompt(PromptTextBox.Text);
         if (prompt.Length == 0)
         {
             MessageBox.Show(this, "수정 요청을 입력하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
+        var settings = _settingsService.Load();
+        await ExecuteEditAsync(
+            _currentConversation.Id,
+            _currentImagePath,
+            prompt,
+            settings.EffectiveModelId,
+            _editMode,
+            _selectionPixelRect);
+    }
+
+    private async void RetryEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy || _currentConversation is null || sender is not Button { Tag: EditRecord edit })
+        {
+            return;
+        }
+
+        if (!File.Exists(edit.InputImagePath))
+        {
+            MessageBox.Show(this, "이 작업에 사용된 입력 이미지를 찾을 수 없습니다.", "다시 시도", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var mode = ParseEditMode(edit.EditMode);
+        Int32Rect? selection = null;
+        if (edit.SelectionX.HasValue && edit.SelectionY.HasValue && edit.SelectionWidth.HasValue && edit.SelectionHeight.HasValue)
+        {
+            selection = new Int32Rect(
+                (int)Math.Round(edit.SelectionX.Value),
+                (int)Math.Round(edit.SelectionY.Value),
+                (int)Math.Round(edit.SelectionWidth.Value),
+                (int)Math.Round(edit.SelectionHeight.Value));
+        }
+
+        SelectHistoryImage(edit.InputImagePath, "재시도 입력 이미지");
+        await ExecuteEditAsync(
+            _currentConversation.Id,
+            edit.InputImagePath,
+            NormalizePrompt(edit.Prompt),
+            edit.ModelId,
+            mode,
+            selection);
+    }
+
+    private async Task ExecuteEditAsync(
+        string conversationId,
+        string sourceImagePath,
+        string prompt,
+        string modelId,
+        ImageEditMode editMode,
+        Int32Rect? selection)
+    {
         var apiKey = CredentialStore.LoadApiKey();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -330,16 +342,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        var settings = _settingsService.Load();
-        var modelId = settings.EffectiveModelId;
-        var conversationId = _currentConversation.Id;
-        var sourceImagePath = _currentImagePath;
-        var edits = _conversationStore.GetEdits(conversationId);
-        var sequence = edits.Count + 1;
-        var stopwatch = Stopwatch.StartNew();
-        var editMode = _editMode;
-        var selection = _selectionPixelRect;
+        if (editMode != ImageEditMode.Full && selection is null)
+        {
+            MessageBox.Show(this, "이 작업의 선택 영역 정보가 없습니다.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
+        var sequence = _conversationStore.GetEdits(conversationId).Count + 1;
+        var stopwatch = Stopwatch.StartNew();
         SetOperationState(true, "요청 준비 중...");
         await Task.Yield();
 
@@ -348,11 +358,11 @@ public partial class MainWindow : Window
             byte[] requestBytes;
             string requestMediaType;
             PreparedRegionRequest? preparedRegion = null;
-            string requestPrompt = prompt;
+            var requestPrompt = prompt;
 
             if (editMode == ImageEditMode.Full)
             {
-                await UpdateOperationStatusAsync("원본 이미지를 읽는 중...");
+                await UpdateOperationStatusAsync("입력 이미지를 읽는 중...");
                 requestBytes = await File.ReadAllBytesAsync(sourceImagePath);
                 requestMediaType = GetImageMediaType(sourceImagePath);
             }
@@ -361,7 +371,7 @@ public partial class MainWindow : Window
                 await UpdateOperationStatusAsync(
                     editMode == ImageEditMode.Region
                         ? "선택 영역과 주변 문맥을 준비하는 중..."
-                        : "선택 영역을 잘라내는 중...");
+                        : "선택 영역을 독립 이미지로 준비하는 중...");
 
                 preparedRegion = _imageRegionService.PrepareRequest(
                     sourceImagePath,
@@ -380,28 +390,26 @@ public partial class MainWindow : Window
                 requestMediaType,
                 requestPrompt);
 
-            await UpdateOperationStatusAsync("결과 이미지를 합성하고 저장하는 중...");
             byte[] outputBytes;
             string outputExtension;
 
-            if (preparedRegion is null)
+            if (editMode == ImageEditMode.Region && preparedRegion is not null)
             {
-                outputBytes = result.ImageBytes;
-                outputExtension = GetImageExtension(result.MediaType);
+                await UpdateOperationStatusAsync("영역 결과를 원본과 자연스럽게 합성하는 중...");
+                outputBytes = _imageRegionService.ComposeRegionResult(sourceImagePath, result.ImageBytes, preparedRegion);
+                outputExtension = ".png";
             }
             else
             {
-                outputBytes = _imageRegionService.ComposeResult(
-                    sourceImagePath,
-                    result.ImageBytes,
-                    preparedRegion);
-                outputExtension = ".png";
+                await UpdateOperationStatusAsync(
+                    editMode == ImageEditMode.Crop
+                        ? "잘라서 편집한 독립 결과를 저장하는 중..."
+                        : "결과 이미지를 저장하는 중...");
+                outputBytes = result.ImageBytes;
+                outputExtension = GetImageExtension(result.MediaType);
             }
 
-            var outputPath = _conversationStore.GetVersionImagePath(
-                conversationId,
-                sequence,
-                outputExtension);
+            var outputPath = _conversationStore.GetVersionImagePath(conversationId, sequence, outputExtension);
             await File.WriteAllBytesAsync(outputPath, outputBytes);
 
             await UpdateOperationStatusAsync("편집 기록을 저장하는 중...");
@@ -421,7 +429,6 @@ public partial class MainWindow : Window
                 outputPath,
                 createdAt));
 
-            await UpdateOperationStatusAsync("화면을 갱신하는 중...");
             PromptTextBox.Clear();
             ClearSelection(false);
             _showingOriginal = false;
@@ -429,6 +436,7 @@ public partial class MainWindow : Window
 
             _isBusy = false;
             RefreshConversationList(conversationId);
+            SelectHistoryImage(outputPath, "최신 결과");
 
             stopwatch.Stop();
             SetOperationState(false, $"완료 ({stopwatch.Elapsed.TotalSeconds:F1}초)");
@@ -437,34 +445,25 @@ public partial class MainWindow : Window
         {
             stopwatch.Stop();
             SetOperationState(false, $"실패 ({stopwatch.Elapsed.TotalSeconds:F1}초)");
-
-            MessageBox.Show(
-                this,
-                exception.Message,
-                "이미지 편집 실패",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            MessageBox.Show(this, exception.Message, "이미지 편집 실패", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    private static string BuildRegionPrompt(
-        string userPrompt,
-        PreparedRegionRequest request,
-        ImageEditMode mode)
+    private static string BuildRegionPrompt(string userPrompt, PreparedRegionRequest request, ImageEditMode mode)
     {
         if (mode == ImageEditMode.Crop)
         {
-            return $"수정 대상은 첨부된 이미지 전체입니다. 요청한 수정만 수행하고 가능한 한 기존 구도와 스타일을 유지하세요.\n\n사용자 요청:\n{userPrompt}";
+            return $"수정 대상은 첨부된 이미지 전체입니다. 결과는 이 이미지 자체로 완성하세요. 요청한 수정만 수행하고 기존 구도와 스타일은 가능한 한 유지하세요.\n\n사용자 요청:\n{userPrompt}";
         }
 
         var relativeX = request.SelectionRect.X - request.RequestRect.X;
         var relativeY = request.SelectionRect.Y - request.RequestRect.Y;
 
         return $"""
-            첨부 이미지는 원본의 일부이며 주변 문맥을 포함합니다.
-            실제 수정 대상은 다음 사각형 영역입니다.
-            X={relativeX}, Y={relativeY}, Width={request.SelectionRect.Width}, Height={request.SelectionRect.Height} 픽셀.
-            이 대상 영역만 사용자 요청대로 수정하고 대상 밖의 주변 문맥은 최대한 유지하세요.
+            첨부 이미지는 원본의 일부이며 실제 수정 대상 주변 문맥까지 포함합니다.
+            실제 수정 대상은 X={relativeX}, Y={relativeY}, Width={request.SelectionRect.Width}, Height={request.SelectionRect.Height} 픽셀입니다.
+            대상 영역은 사용자 요청대로 수정하되, 대상 경계의 조명·색·선·텍스처가 주변과 자연스럽게 이어지도록 만드세요.
+            대상 밖 주변 문맥은 가능한 한 유지하세요.
 
             사용자 요청:
             {userPrompt}
@@ -476,7 +475,6 @@ public partial class MainWindow : Window
         _isBusy = isBusy;
         OperationStatusTextBlock.Text = statusMessage;
         OperationProgressBar.Visibility = isBusy ? Visibility.Visible : Visibility.Collapsed;
-
         EditImageButton.IsEnabled = !isBusy;
         EditImageButton.Content = isBusy ? "수정 중..." : "이미지 수정";
         PromptTextBox.IsEnabled = !isBusy;
@@ -508,16 +506,15 @@ public partial class MainWindow : Window
         _editMode = mode;
         SelectionCanvas.IsHitTestVisible = mode != ImageEditMode.Full;
         SelectionCanvas.Cursor = mode == ImageEditMode.Full ? Cursors.Arrow : Cursors.Cross;
-
         FullEditModeButton.FontWeight = mode == ImageEditMode.Full ? FontWeights.Bold : FontWeights.Normal;
         RegionEditModeButton.FontWeight = mode == ImageEditMode.Region ? FontWeights.Bold : FontWeights.Normal;
         CropEditModeButton.FontWeight = mode == ImageEditMode.Crop ? FontWeights.Bold : FontWeights.Normal;
 
         OperationStatusTextBlock.Text = mode switch
         {
-            ImageEditMode.Full => "전체 편집 모드: 이미지 전체가 수정 대상입니다.",
-            ImageEditMode.Region => "영역 편집 모드: 이미지에서 수정할 부분을 사각형으로 드래그하세요.",
-            ImageEditMode.Crop => "잘라서 편집 모드: AI에 보낼 영역을 사각형으로 드래그하세요.",
+            ImageEditMode.Full => "전체 편집 모드: 현재 선택된 이미지 전체가 수정 대상입니다.",
+            ImageEditMode.Region => "영역 편집 모드: 수정할 부분을 사각형으로 드래그하세요.",
+            ImageEditMode.Crop => "잘라서 편집 모드: 독립 이미지로 편집할 부분을 사각형으로 드래그하세요.",
             _ => "준비됨"
         };
     }
@@ -528,7 +525,6 @@ public partial class MainWindow : Window
         _isSelecting = false;
         SelectionCanvas.ReleaseMouseCapture();
         SelectionRectangle.Visibility = Visibility.Collapsed;
-
         if (updateStatus)
         {
             SetEditMode(_editMode);
@@ -537,20 +533,15 @@ public partial class MainWindow : Window
 
     private Rect GetDisplayedImageRect()
     {
-        if (EditorImage.Source is not BitmapSource bitmap ||
-            SelectionCanvas.ActualWidth <= 0 || SelectionCanvas.ActualHeight <= 0)
+        if (EditorImage.Source is not BitmapSource bitmap || SelectionCanvas.ActualWidth <= 0 || SelectionCanvas.ActualHeight <= 0)
         {
             return Rect.Empty;
         }
 
-        var scale = Math.Min(
-            SelectionCanvas.ActualWidth / bitmap.PixelWidth,
-            SelectionCanvas.ActualHeight / bitmap.PixelHeight);
+        var scale = Math.Min(SelectionCanvas.ActualWidth / bitmap.PixelWidth, SelectionCanvas.ActualHeight / bitmap.PixelHeight);
         var width = bitmap.PixelWidth * scale;
         var height = bitmap.PixelHeight * scale;
-        var left = (SelectionCanvas.ActualWidth - width) / 2.0;
-        var top = (SelectionCanvas.ActualHeight - height) / 2.0;
-        return new Rect(left, top, width, height);
+        return new Rect((SelectionCanvas.ActualWidth - width) / 2.0, (SelectionCanvas.ActualHeight - height) / 2.0, width, height);
     }
 
     private Int32Rect VisualRectToPixelRect(Rect visualRect, Rect displayedImageRect)
@@ -562,27 +553,16 @@ public partial class MainWindow : Window
 
         var scaleX = bitmap.PixelWidth / displayedImageRect.Width;
         var scaleY = bitmap.PixelHeight / displayedImageRect.Height;
-
-        var x = Math.Clamp(
-            (int)Math.Round((visualRect.Left - displayedImageRect.Left) * scaleX),
-            0,
-            bitmap.PixelWidth - 1);
-        var y = Math.Clamp(
-            (int)Math.Round((visualRect.Top - displayedImageRect.Top) * scaleY),
-            0,
-            bitmap.PixelHeight - 1);
-        var width = Math.Max(1, (int)Math.Round(visualRect.Width * scaleX));
-        var height = Math.Max(1, (int)Math.Round(visualRect.Height * scaleY));
-
-        width = Math.Min(width, bitmap.PixelWidth - x);
-        height = Math.Min(height, bitmap.PixelHeight - y);
+        var x = Math.Clamp((int)Math.Round((visualRect.Left - displayedImageRect.Left) * scaleX), 0, bitmap.PixelWidth - 1);
+        var y = Math.Clamp((int)Math.Round((visualRect.Top - displayedImageRect.Top) * scaleY), 0, bitmap.PixelHeight - 1);
+        var width = Math.Min(Math.Max(1, (int)Math.Round(visualRect.Width * scaleX)), bitmap.PixelWidth - x);
+        var height = Math.Min(Math.Max(1, (int)Math.Round(visualRect.Height * scaleY)), bitmap.PixelHeight - y);
         return new Int32Rect(x, y, width, height);
     }
 
     private void RenderSelectionRectangle()
     {
-        if (_selectionPixelRect is not { } selection ||
-            EditorImage.Source is not BitmapSource bitmap)
+        if (_selectionPixelRect is not { } selection || EditorImage.Source is not BitmapSource bitmap)
         {
             SelectionRectangle.Visibility = Visibility.Collapsed;
             return;
@@ -619,36 +599,17 @@ public partial class MainWindow : Window
         SelectionRectangle.Visibility = Visibility.Visible;
     }
 
-    private static Rect NormalizeRect(Point a, Point b)
-    {
-        return new Rect(
-            new Point(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y)),
-            new Point(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
-    }
+    private static Rect NormalizeRect(Point a, Point b) =>
+        new(new Point(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y)), new Point(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
 
-    private static Point ClampToRect(Point point, Rect rect)
-    {
-        if (rect.IsEmpty)
-        {
-            return point;
-        }
-
-        return new Point(
-            Math.Clamp(point.X, rect.Left, rect.Right),
-            Math.Clamp(point.Y, rect.Top, rect.Bottom));
-    }
+    private static Point ClampToRect(Point point, Rect rect) => rect.IsEmpty
+        ? point
+        : new Point(Math.Clamp(point.X, rect.Left, rect.Right), Math.Clamp(point.Y, rect.Top, rect.Bottom));
 
     private static bool TryGetSingleImagePath(IDataObject data, out string? imagePath)
     {
         imagePath = null;
-
-        if (!data.GetDataPresent(DataFormats.FileDrop))
-        {
-            return false;
-        }
-
-        var files = data.GetData(DataFormats.FileDrop) as string[];
-        if (files is not { Length: 1 })
+        if (!data.GetDataPresent(DataFormats.FileDrop) || data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } files)
         {
             return false;
         }
@@ -685,7 +646,6 @@ public partial class MainWindow : Window
         {
             var item = CreateConversationListItem(conversation);
             ConversationList.Items.Add(item);
-
             if (conversation.Id == selectedConversationId)
             {
                 selectedItem = item;
@@ -699,9 +659,10 @@ public partial class MainWindow : Window
     {
         var edits = _conversationStore.GetEdits(conversation.Id);
         var latestEdit = edits.LastOrDefault();
-        var thumbnailPath = File.Exists(conversation.CurrentImagePath)
-            ? conversation.CurrentImagePath
-            : conversation.OriginalImagePath;
+        var thumbnailPath = File.Exists(conversation.CurrentImagePath) ? conversation.CurrentImagePath : conversation.OriginalImagePath;
+        var latestPrompt = latestEdit is null ? "새 이미지 대화" : NormalizePrompt(latestEdit.Prompt);
+        var titleText = ToPreview(latestPrompt, 28);
+        var detailText = latestEdit is null ? "아직 편집 요청이 없습니다." : ToPreview(latestPrompt, 44);
 
         var thumbnail = new Image
         {
@@ -712,26 +673,22 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 0, 10, 0)
         };
 
-        var titlePanel = new StackPanel
-        {
-            VerticalAlignment = VerticalAlignment.Center
-        };
+        var titlePanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         titlePanel.Children.Add(new TextBlock
         {
-            Text = conversation.Title,
+            Text = titleText,
             FontWeight = FontWeights.SemiBold,
-            TextTrimming = TextTrimming.CharacterEllipsis
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 130
         });
         titlePanel.Children.Add(new TextBlock
         {
-            Text = latestEdit is null
-                ? "아직 편집 요청이 없습니다."
-                : latestEdit.Prompt.ReplaceLineEndings(" "),
+            Text = detailText,
             Margin = new Thickness(0, 3, 0, 0),
             Foreground = Brushes.DimGray,
             FontSize = 11,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxWidth = 125
+            MaxWidth = 130
         });
         titlePanel.Children.Add(new TextBlock
         {
@@ -745,7 +702,6 @@ public partial class MainWindow : Window
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
         Grid.SetColumn(thumbnail, 0);
         Grid.SetColumn(titlePanel, 1);
         contentGrid.Children.Add(thumbnail);
@@ -776,11 +732,7 @@ public partial class MainWindow : Window
     private static ListBoxItem CreateEmptyConversationListItem()
     {
         var panel = new StackPanel();
-        panel.Children.Add(new TextBlock
-        {
-            Text = "대화가 없습니다.",
-            FontWeight = FontWeights.SemiBold
-        });
+        panel.Children.Add(new TextBlock { Text = "대화가 없습니다.", FontWeight = FontWeights.SemiBold });
         panel.Children.Add(new TextBlock
         {
             Text = "새 대화에서 이미지를 선택하세요.",
@@ -788,13 +740,7 @@ public partial class MainWindow : Window
             Foreground = Brushes.Gray,
             TextWrapping = TextWrapping.Wrap
         });
-
-        return new ListBoxItem
-        {
-            IsEnabled = false,
-            Padding = new Thickness(10),
-            Content = panel
-        };
+        return new ListBoxItem { IsEnabled = false, Padding = new Thickness(10), Content = panel };
     }
 
     private void ShowConversation(ConversationRecord conversation)
@@ -804,61 +750,126 @@ public partial class MainWindow : Window
         _showingOriginal = false;
         CompareOriginalButton.Content = "원본 비교";
         ClearSelection(false);
-
-        EditorImage.Source = LoadBitmap(conversation.CurrentImagePath);
-        EditorImage.Visibility = Visibility.Visible;
-        CanvasPlaceholder.Visibility = Visibility.Collapsed;
+        ShowImage(conversation.CurrentImagePath);
 
         ChatHistoryPanel.Children.Clear();
-        ChatHistoryPanel.Children.Add(CreateHistoryTextCard(
-            $"원본 이미지: {Path.GetFileName(conversation.OriginalImagePath)}",
-            Color.FromRgb(241, 243, 246)));
+        ChatHistoryPanel.Children.Add(CreateHistoryTextCard("최초 이미지", Color.FromRgb(241, 243, 246)));
 
         foreach (var edit in _conversationStore.GetEdits(conversation.Id))
         {
             ChatHistoryPanel.Children.Add(CreateHistoryTextCard(
-                $"{edit.Prompt}\n\n[{edit.EditMode}]  {edit.ModelId}",
+                $"{NormalizePrompt(edit.Prompt)}\n\n[{edit.EditMode}]  {edit.ModelId}",
                 Color.FromRgb(231, 240, 255)));
 
             if (File.Exists(edit.OutputImagePath))
             {
-                var resultImage = new Image
-                {
-                    Source = LoadBitmap(edit.OutputImagePath, 420),
-                    Stretch = Stretch.Uniform,
-                    MaxHeight = 260
-                };
-                ChatHistoryPanel.Children.Add(new Border
-                {
-                    Background = Brushes.White,
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(225, 228, 234)),
-                    BorderThickness = new Thickness(1),
-                    CornerRadius = new CornerRadius(8),
-                    Padding = new Thickness(8),
-                    Margin = new Thickness(0, 8, 0, 4),
-                    Child = resultImage
-                });
+                ChatHistoryPanel.Children.Add(CreateHistoryResultCard(edit));
             }
         }
 
         SetEditMode(_editMode);
     }
 
-    private static Border CreateHistoryTextCard(string text, Color backgroundColor)
+    private Border CreateHistoryResultCard(EditRecord edit)
     {
+        var panel = new StackPanel();
+        var resultImage = new Image
+        {
+            Source = LoadBitmap(edit.OutputImagePath, 420),
+            Stretch = Stretch.Uniform,
+            MaxHeight = 260,
+            Cursor = Cursors.Hand,
+            Tag = edit.OutputImagePath,
+            ToolTip = "클릭하면 이 이미지를 다음 편집의 기준으로 사용합니다."
+        };
+        resultImage.MouseLeftButtonUp += HistoryResultImage_MouseLeftButtonUp;
+        panel.Children.Add(resultImage);
+
+        var buttonRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        var selectButton = new Button
+        {
+            Content = "이 이미지에서 계속",
+            Tag = edit.OutputImagePath,
+            Padding = new Thickness(8, 4, 8, 4),
+            Margin = new Thickness(0, 0, 6, 0)
+        };
+        selectButton.Click += HistoryResultSelectButton_Click;
+        buttonRow.Children.Add(selectButton);
+
+        var retryButton = new Button
+        {
+            Content = "다시 시도",
+            Tag = edit,
+            Padding = new Thickness(8, 4, 8, 4)
+        };
+        retryButton.Click += RetryEditButton_Click;
+        buttonRow.Children.Add(retryButton);
+        panel.Children.Add(buttonRow);
+
         return new Border
         {
-            Background = new SolidColorBrush(backgroundColor),
+            Background = Brushes.White,
+            BorderBrush = new SolidColorBrush(Color.FromRgb(225, 228, 234)),
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12),
-            Margin = new Thickness(0, 0, 0, 8),
-            Child = new TextBlock
-            {
-                Text = text,
-                TextWrapping = TextWrapping.Wrap
-            }
+            Padding = new Thickness(8),
+            Margin = new Thickness(0, 8, 0, 4),
+            Child = panel
         };
     }
+
+    private void HistoryResultImage_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isBusy && sender is Image { Tag: string imagePath })
+        {
+            SelectHistoryImage(imagePath, "선택한 이전 결과");
+        }
+    }
+
+    private void HistoryResultSelectButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_isBusy && sender is Button { Tag: string imagePath })
+        {
+            SelectHistoryImage(imagePath, "선택한 이전 결과");
+        }
+    }
+
+    private void SelectHistoryImage(string imagePath, string label)
+    {
+        if (!File.Exists(imagePath))
+        {
+            return;
+        }
+
+        _currentImagePath = imagePath;
+        _showingOriginal = false;
+        CompareOriginalButton.Content = "원본 비교";
+        ClearSelection(false);
+        ShowImage(imagePath);
+        OperationStatusTextBlock.Text = $"{label}: 이 이미지를 기준으로 다음 수정을 진행합니다.";
+    }
+
+    private void ShowImage(string imagePath)
+    {
+        EditorImage.Source = LoadBitmap(imagePath);
+        EditorImage.Visibility = Visibility.Visible;
+        CanvasPlaceholder.Visibility = Visibility.Collapsed;
+        RenderSelectionRectangle();
+    }
+
+    private static Border CreateHistoryTextCard(string text, Color backgroundColor) => new()
+    {
+        Background = new SolidColorBrush(backgroundColor),
+        CornerRadius = new CornerRadius(8),
+        Padding = new Thickness(12),
+        Margin = new Thickness(0, 0, 0, 8),
+        Child = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap }
+    };
 
     private void ClearWorkspace()
     {
@@ -870,43 +881,54 @@ public partial class MainWindow : Window
         CanvasPlaceholder.Visibility = Visibility.Visible;
         CompareOriginalButton.Content = "원본 비교";
         ClearSelection(false);
-
         ChatHistoryPanel.Children.Clear();
-        ChatHistoryPanel.Children.Add(CreateHistoryTextCard(
-            "이미지를 선택하면 편집 대화가 시작됩니다.",
-            Color.FromRgb(241, 243, 246)));
+        ChatHistoryPanel.Children.Add(CreateHistoryTextCard("이미지를 선택하면 편집 대화가 시작됩니다.", Color.FromRgb(241, 243, 246)));
     }
 
-    private static string GetEditModeDisplayName(ImageEditMode mode)
+    private static string NormalizePrompt(string? value)
     {
-        return mode switch
+        if (string.IsNullOrWhiteSpace(value))
         {
-            ImageEditMode.Region => "영역 편집",
-            ImageEditMode.Crop => "잘라서 편집",
-            _ => "전체 편집"
-        };
+            return string.Empty;
+        }
+
+        return Regex.Replace(value.Trim(), @"\s+", " ");
     }
 
-    private static string GetImageMediaType(string imagePath)
+    private static string ToPreview(string value, int maxLength)
     {
-        return Path.GetExtension(imagePath).ToLowerInvariant() switch
-        {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".bmp" => "image/bmp",
-            ".webp" => "image/webp",
-            _ => "image/png"
-        };
+        var normalized = NormalizePrompt(value);
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength] + "…";
     }
 
-    private static string GetImageExtension(string mediaType)
+    private static ImageEditMode ParseEditMode(string value) => value switch
     {
-        return mediaType.ToLowerInvariant() switch
-        {
-            "image/jpeg" or "image/jpg" => ".jpg",
-            "image/webp" => ".webp",
-            _ => ".png"
-        };
-    }
+        "영역 편집" => ImageEditMode.Region,
+        "잘라서 편집" => ImageEditMode.Crop,
+        _ => ImageEditMode.Full
+    };
+
+    private static string GetEditModeDisplayName(ImageEditMode mode) => mode switch
+    {
+        ImageEditMode.Region => "영역 편집",
+        ImageEditMode.Crop => "잘라서 편집",
+        _ => "전체 편집"
+    };
+
+    private static string GetImageMediaType(string imagePath) => Path.GetExtension(imagePath).ToLowerInvariant() switch
+    {
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".bmp" => "image/bmp",
+        ".webp" => "image/webp",
+        _ => "image/png"
+    };
+
+    private static string GetImageExtension(string mediaType) => mediaType.ToLowerInvariant() switch
+    {
+        "image/jpeg" or "image/jpg" => ".jpg",
+        "image/webp" => ".webp",
+        _ => ".png"
+    };
 
     private static BitmapImage LoadBitmap(string imagePath, int decodePixelWidth = 0)
     {
