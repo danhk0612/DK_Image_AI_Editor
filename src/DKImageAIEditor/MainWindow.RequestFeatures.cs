@@ -104,13 +104,13 @@ public partial class MainWindow
             return;
         }
 
-        var textBlock = FindVisualAncestor<TextBlock>(source);
+        var textBlock = FindAncestor<TextBlock>(source);
         if (textBlock is null || string.IsNullOrWhiteSpace(textBlock.Text))
         {
             return;
         }
 
-        if (FindVisualAncestor<Button>(textBlock) is not null)
+        if (FindAncestor<Button>(textBlock) is not null)
         {
             return;
         }
@@ -120,7 +120,7 @@ public partial class MainWindow
         e.Handled = true;
     }
 
-    private static T? FindVisualAncestor<T>(DependencyObject? source)
+    private static T? FindAncestor<T>(DependencyObject? source)
         where T : DependencyObject
     {
         var current = source;
@@ -131,7 +131,13 @@ public partial class MainWindow
                 return match;
             }
 
-            current = VisualTreeHelper.GetParent(current);
+            current = current switch
+            {
+                ContentElement contentElement =>
+                    ContentOperations.GetParent(contentElement) ??
+                    (contentElement as FrameworkContentElement)?.Parent,
+                _ => VisualTreeHelper.GetParent(current)
+            };
         }
 
         return null;
