@@ -1,7 +1,12 @@
 $ErrorActionPreference = 'Stop'
 
-$Version = '0.5.0'
 $Project = Join-Path $PSScriptRoot 'src\DKImageAIEditor\DKImageAIEditor.csproj'
+[xml]$ProjectXml = Get-Content $Project
+$Version = [string]($ProjectXml.Project.PropertyGroup.Version | Select-Object -First 1)
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    throw '프로젝트 Version 값을 찾을 수 없습니다.'
+}
+
 $PublishDir = Join-Path $PSScriptRoot 'src\DKImageAIEditor\bin\Release\net8.0-windows\win-x64\publish'
 $DistDir = Join-Path $PSScriptRoot 'dist'
 $PackageName = "DK-Image-AI-Editor-v$Version-win-x64"
