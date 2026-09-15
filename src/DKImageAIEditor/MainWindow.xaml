@@ -70,7 +70,10 @@
                     <ListBox x:Name="ConversationList"
                              BorderThickness="0"
                              Background="Transparent"
-                             Padding="8">
+                             Padding="8"
+                             HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListBoxItem IsEnabled="False" Padding="10">
                             <StackPanel>
                                 <TextBlock Text="대화가 없습니다." FontWeight="SemiBold" />
@@ -100,8 +103,23 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Grid x:Name="EditorSurface" Grid.Row="0" ClipToBounds="True">
-                        <Grid x:Name="ImageViewport" Margin="14" ClipToBounds="True">
+                    <Grid x:Name="EditorSurface"
+                          Grid.Row="0"
+                          ClipToBounds="True"
+                          MouseWheel="EditorSurface_MouseWheel"
+                          MouseDown="EditorSurface_MouseDown"
+                          MouseMove="EditorSurface_MouseMove"
+                          MouseUp="EditorSurface_MouseUp">
+                        <Grid x:Name="ImageViewport"
+                              Margin="14"
+                              ClipToBounds="True"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform x:Name="ViewportScaleTransform" ScaleX="1" ScaleY="1" />
+                                    <TranslateTransform x:Name="ViewportTranslateTransform" X="0" Y="0" />
+                                </TransformGroup>
+                            </Grid.RenderTransform>
                             <Image x:Name="EditorImage"
                                    Stretch="Uniform"
                                    Visibility="Collapsed" />
@@ -117,7 +135,59 @@
                                            Stroke="#FF3B82F6"
                                            StrokeThickness="2"
                                            Fill="#303B82F6"
-                                           StrokeDashArray="4,2" />
+                                           StrokeDashArray="4,2"
+                                           IsHitTestVisible="False"
+                                           Panel.ZIndex="0" />
+                                <Thumb x:Name="SelectionMoveThumb"
+                                       Visibility="Collapsed"
+                                       Background="#01000000"
+                                       Cursor="SizeAll"
+                                       DragDelta="SelectionMoveThumb_DragDelta"
+                                       Panel.ZIndex="1" />
+                                <Thumb x:Name="SelectionTopLeftThumb"
+                                       Tag="TL"
+                                       Width="12"
+                                       Height="12"
+                                       Visibility="Collapsed"
+                                       Background="White"
+                                       BorderBrush="#FF3B82F6"
+                                       BorderThickness="2"
+                                       Cursor="SizeNWSE"
+                                       DragDelta="SelectionResizeThumb_DragDelta"
+                                       Panel.ZIndex="2" />
+                                <Thumb x:Name="SelectionTopRightThumb"
+                                       Tag="TR"
+                                       Width="12"
+                                       Height="12"
+                                       Visibility="Collapsed"
+                                       Background="White"
+                                       BorderBrush="#FF3B82F6"
+                                       BorderThickness="2"
+                                       Cursor="SizeNESW"
+                                       DragDelta="SelectionResizeThumb_DragDelta"
+                                       Panel.ZIndex="2" />
+                                <Thumb x:Name="SelectionBottomLeftThumb"
+                                       Tag="BL"
+                                       Width="12"
+                                       Height="12"
+                                       Visibility="Collapsed"
+                                       Background="White"
+                                       BorderBrush="#FF3B82F6"
+                                       BorderThickness="2"
+                                       Cursor="SizeNESW"
+                                       DragDelta="SelectionResizeThumb_DragDelta"
+                                       Panel.ZIndex="2" />
+                                <Thumb x:Name="SelectionBottomRightThumb"
+                                       Tag="BR"
+                                       Width="12"
+                                       Height="12"
+                                       Visibility="Collapsed"
+                                       Background="White"
+                                       BorderBrush="#FF3B82F6"
+                                       BorderThickness="2"
+                                       Cursor="SizeNWSE"
+                                       DragDelta="SelectionResizeThumb_DragDelta"
+                                       Panel.ZIndex="2" />
                             </Canvas>
                         </Grid>
                         <TextBlock x:Name="CanvasPlaceholder"
