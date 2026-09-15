@@ -13,11 +13,26 @@ $PackageName = "DK-Image-AI-Editor-v$Version-win-x64"
 $StageDir = Join-Path $DistDir $PackageName
 $ZipPath = Join-Path $DistDir "$PackageName.zip"
 
+function Assert-LastExitCode([string]$Step) {
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Step 실패 (exit code: $LASTEXITCODE)"
+    }
+}
+
 Write-Host "DK Image AI Editor v$Version - Windows x64 publish"
 
-dotnet restore $Project
+dotnet restore $Project -r win-x64
+Assert-LastExitCode 'dotnet restore'
+
 dotnet build $Project -c Release --no-restore
-dotnet publish $Project -c Release -p:PublishProfile=win-x64 --no-build
+Assert-LastExitCode 'dotnet build'
+
+dotnet publish $Project -c Release -r win-x64 -p:PublishProfile=win-x64 --no-restore
+Assert-LastExitCode 'dotnet publish'
+
+if (-not (Test-Path $PublishDir)) {
+    throw "Publish 폴더를 찾을 수 없습니다: $PublishDir"
+}
 
 if (Test-Path $DistDir) {
     Remove-Item $DistDir -Recurse -Force
