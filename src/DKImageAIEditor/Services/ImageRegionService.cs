@@ -89,21 +89,23 @@ public sealed class ImageRegionService
         var editedPixels = new byte[editedStride * edited.PixelHeight];
         edited.CopyPixels(editedPixels, editedStride, 0);
 
-        var feather = Math.Clamp(
-            (int)Math.Round(Math.Min(request.SelectionRect.Width, request.SelectionRect.Height) * 0.06),
-            4,
-            32);
+        // 큰 선택 영역에서는 기존 32px 상한보다 조금 넓게 섞고,
+        // 작은 선택 영역에서는 편집 내용이 과도하게 희석되지 않도록 제한한다.
+        var featherX = GetFeatherSize(request.SelectionRect.Width);
+        var featherY = GetFeatherSize(request.SelectionRect.Height);
 
         for (var y = 0; y < request.SelectionRect.Height; y++)
         {
+            var edgeY = Math.Min(y, request.SelectionRect.Height - 1 - y);
+            var alphaY = SmoothStep(Math.Clamp((edgeY + 1) / (double)featherY, 0.0, 1.0));
+
             for (var x = 0; x < request.SelectionRect.Width; x++)
             {
-                var distanceToEdge = Math.Min(
-                    Math.Min(x, request.SelectionRect.Width - 1 - x),
-                    Math.Min(y, request.SelectionRect.Height - 1 - y));
+                var edgeX = Math.Min(x, request.SelectionRect.Width - 1 - x);
+                var alphaX = SmoothStep(Math.Clamp((edgeX + 1) / (double)featherX, 0.0, 1.0));
 
-                var alpha = Math.Clamp((distanceToEdge + 1) / (double)feather, 0.0, 1.0);
-                alpha = alpha * alpha * (3.0 - 2.0 * alpha);
+                // 모서리는 가로/세로 두 경계의 영향을 모두 받아 자연스럽게 원본으로 감쇠한다.
+                var alpha = Math.Min(alphaX, alphaY);
 
                 var sourceX = request.SelectionRect.X + x;
                 var sourceY = request.SelectionRect.Y + y;
@@ -135,6 +137,18 @@ public sealed class ImageRegionService
             sourceStride);
         result.Freeze();
         return EncodePng(result);
+    }
+
+    private static int GetFeatherSize(int dimension)
+    {
+        var proportional = (int)Math.Round(dimension * 0.08);
+        var maximumForDimension = Math.Max(2, dimension / 3);
+        return Math.Clamp(proportional, 4, Math.Min(48, maximumForDimension));
+    }
+
+    private static double SmoothStep(double value)
+    {
+        return value * value * (3.0 - 2.0 * value);
     }
 
     private static BitmapSource ResizeTo(BitmapSource source, int width, int height)
