@@ -77,7 +77,7 @@ public sealed class OpenRouterImageService
 
         var totalCredits = TryGetDouble(creditsData, "total_credits");
         var totalUsage = TryGetDouble(creditsData, "total_usage");
-        var creditBalance = totalCredits.HasValue && totalUsage.HasValue
+        double? creditBalance = totalCredits.HasValue && totalUsage.HasValue
             ? totalCredits.Value - totalUsage.Value
             : null;
 
