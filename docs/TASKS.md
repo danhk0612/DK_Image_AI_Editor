@@ -55,6 +55,9 @@
 - [x] 수정 요청별 모델 Selector
 - [x] 설정의 기본 모델을 요청 Selector 초기값으로 사용
 - [x] Custom Model ID를 요청 Selector 마지막에 표시
+- [x] 현재 API Key 사용량/잔여 한도 조회
+- [x] Management Key인 경우 같은 키로 충전 잔액 조회
+- [x] 추가 Management Key 설정 없이 현재 저장 키만 사용
 - [ ] 실제 Windows 환경 저장/재실행 검증
 
 ## T06 OpenRouter 전체 이미지 편집
