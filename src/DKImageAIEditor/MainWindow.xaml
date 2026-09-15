@@ -6,7 +6,10 @@
         Height="900"
         MinWidth="1100"
         MinHeight="700"
-        Background="{StaticResource WindowBackgroundBrush}">
+        Background="{StaticResource WindowBackgroundBrush}"
+        AllowDrop="True"
+        DragOver="Window_DragOver"
+        Drop="Window_Drop">
     <DockPanel>
         <Border DockPanel.Dock="Top"
                 Background="{StaticResource PanelBackgroundBrush}"
@@ -94,9 +97,13 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0">
+                    <Grid Grid.Row="0" ClipToBounds="True">
+                        <Image x:Name="EditorImage"
+                               Stretch="Uniform"
+                               Margin="14"
+                               Visibility="Collapsed" />
                         <TextBlock x:Name="CanvasPlaceholder"
-                                   Text="이미지를 열면 여기에 표시됩니다."
+                                   Text="이미지를 열거나 이 창에 드래그해 놓으세요."
                                    Foreground="#B9C0CC"
                                    FontSize="16"
                                    HorizontalAlignment="Center"
