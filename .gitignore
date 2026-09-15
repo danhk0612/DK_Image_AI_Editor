@@ -1,0 +1,25 @@
+# Build output
+bin/
+obj/
+artifacts/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Local app/runtime data
+*.db
+*.db-shm
+*.db-wal
+settings.local.json
+
+# OS
+Thumbs.db
+.DS_Store
