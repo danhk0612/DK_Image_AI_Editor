@@ -138,8 +138,9 @@ public partial class MainWindow : Window
 
         var settings = _settingsService.Load();
         var modelId = settings.EffectiveModelId;
+        var conversationId = _currentConversation.Id;
         var sourceImagePath = _currentImagePath;
-        var edits = _conversationStore.GetEdits(_currentConversation.Id);
+        var edits = _conversationStore.GetEdits(conversationId);
         var sequence = edits.Count + 1;
 
         EditImageButton.IsEnabled = false;
@@ -156,7 +157,7 @@ public partial class MainWindow : Window
                 prompt);
 
             var outputPath = _conversationStore.GetVersionImagePath(
-                _currentConversation.Id,
+                conversationId,
                 sequence,
                 GetImageExtension(result.MediaType));
             await File.WriteAllBytesAsync(outputPath, result.ImageBytes);
@@ -164,7 +165,7 @@ public partial class MainWindow : Window
             var createdAt = DateTimeOffset.UtcNow;
             _conversationStore.AddEdit(new EditRecord(
                 Guid.NewGuid().ToString("N"),
-                _currentConversation.Id,
+                conversationId,
                 sequence,
                 prompt,
                 modelId,
@@ -178,7 +179,7 @@ public partial class MainWindow : Window
                 createdAt));
 
             PromptTextBox.Clear();
-            RefreshConversationList(_currentConversation.Id);
+            RefreshConversationList(conversationId);
         }
         catch (Exception exception)
         {
