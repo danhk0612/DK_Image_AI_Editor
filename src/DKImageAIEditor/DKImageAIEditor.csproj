@@ -7,9 +7,14 @@
     <Nullable>enable</Nullable>
     <AssemblyName>DKImageAIEditor</AssemblyName>
     <RootNamespace>DKImageAIEditor</RootNamespace>
+    <ApplicationIcon>$(IntermediateOutputPath)DKImageAIEditor.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.31" />
   </ItemGroup>
+
+  <Target Name="GenerateApplicationIcon" BeforeTargets="CoreCompile">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;$base64 = [IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Assets\AppIcon.ico.base64'); [IO.File]::WriteAllBytes('$(IntermediateOutputPath)DKImageAIEditor.ico', [Convert]::FromBase64String($base64))&quot;" />
+  </Target>
 </Project>
