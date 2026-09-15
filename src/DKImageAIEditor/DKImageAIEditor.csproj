@@ -13,7 +13,8 @@
     <Product>DK Image AI Editor</Product>
     <Authors>참빛바다</Authors>
     <Copyright>Copyright © 2026 참빛바다</Copyright>
-    <ApplicationIcon>$(IntermediateOutputPath)DKImageAIEditor.ico</ApplicationIcon>
+    <GeneratedApplicationIcon>$(MSBuildProjectDirectory)\DKImageAIEditor.ico</GeneratedApplicationIcon>
+    <ApplicationIcon>$(GeneratedApplicationIcon)</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,7 +22,10 @@
   </ItemGroup>
 
   <Target Name="GenerateApplicationIcon" BeforeTargets="CoreCompile">
-    <MakeDir Directories="$(IntermediateOutputPath)" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;$base64 = [IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Assets\AppIcon.ico.base64'); [IO.File]::WriteAllBytes('$(IntermediateOutputPath)DKImageAIEditor.ico', [Convert]::FromBase64String($base64))&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;$base64 = [IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Assets\AppIcon.ico.base64'); [IO.File]::WriteAllBytes('$(GeneratedApplicationIcon)', [Convert]::FromBase64String($base64))&quot;" />
+  </Target>
+
+  <Target Name="RemoveGeneratedApplicationIcon" AfterTargets="Clean">
+    <Delete Files="$(GeneratedApplicationIcon)" />
   </Target>
 </Project>
