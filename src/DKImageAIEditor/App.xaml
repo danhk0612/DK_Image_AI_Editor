@@ -7,5 +7,35 @@
         <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="BorderBrush" Color="#D9DEE7" />
         <SolidColorBrush x:Key="AccentBrush" Color="#352E59" />
+
+        <!-- 이미지 프레임 + AI 스파클을 결합한 DK Image AI Editor 벡터 아이콘 -->
+        <DrawingImage x:Key="AppIcon">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#352E59">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,0,64,64" RadiusX="14" RadiusY="14" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="M14,17 L41,17 L41,43 L14,43 Z">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FFFFFF" Thickness="3.5" LineJoin="Round" />
+                        </GeometryDrawing.Pen>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="M17,38 L25,29 L31,35 L35,31 L41,38">
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#FFFFFF" Thickness="3.2" StartLineCap="Round" EndLineCap="Round" LineJoin="Round" />
+                        </GeometryDrawing.Pen>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#FFFFFF">
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="22,24" RadiusX="3" RadiusY="3" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#83D5FF" Geometry="M47,12 L49.5,19.5 L57,22 L49.5,24.5 L47,32 L44.5,24.5 L37,22 L44.5,19.5 Z" />
+                    <GeometryDrawing Brush="#83D5FF" Geometry="M52,34 L53.5,38.5 L58,40 L53.5,41.5 L52,46 L50.5,41.5 L46,40 L50.5,38.5 Z" />
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
     </Application.Resources>
 </Application>
