@@ -1,0 +1,89 @@
+<Window x:Class="DKImageAIEditor.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="설정"
+        Width="620"
+        Height="510"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource WindowBackgroundBrush}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Background="{StaticResource PanelBackgroundBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="20">
+            <StackPanel>
+                <TextBlock Text="OpenRouter" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock Text="이미지 편집 API 연결과 사용할 모델을 설정합니다."
+                           Margin="0,5,0,20"
+                           Foreground="#6F7785" />
+
+                <TextBlock Text="API Key" FontWeight="SemiBold" />
+                <PasswordBox x:Name="ApiKeyPasswordBox"
+                             Margin="0,7,0,6"
+                             Height="34"
+                             Padding="8,5" />
+                <TextBlock Text="API Key는 Windows 자격 증명 관리자에 저장됩니다."
+                           Foreground="#7A8290"
+                           FontSize="12"
+                           Margin="0,0,0,20" />
+
+                <TextBlock Text="이미지 편집 모델" FontWeight="SemiBold" />
+
+                <RadioButton x:Name="PresetModelRadioButton"
+                             Content="기본 모델 선택"
+                             Margin="0,10,0,6"
+                             Checked="ModelMode_Checked" />
+                <ComboBox x:Name="PresetModelComboBox"
+                          Height="34"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="ModelId"
+                          Margin="20,0,0,12" />
+
+                <RadioButton x:Name="CustomModelRadioButton"
+                             Content="Custom 모델 ID 직접 입력"
+                             Margin="0,0,0,6"
+                             Checked="ModelMode_Checked" />
+                <TextBox x:Name="CustomModelTextBox"
+                         Height="34"
+                         Padding="8,5"
+                         Margin="20,0,0,14"
+                         ToolTip="예: provider/model-name" />
+
+                <Border Background="#F5F6F8" CornerRadius="6" Padding="12">
+                    <StackPanel>
+                        <TextBlock Text="현재 사용 가능한 이미지 모델과 가격은 OpenRouter 컬렉션을 기준으로 확인하세요."
+                                   TextWrapping="Wrap"
+                                   Foreground="#596170" />
+                        <TextBlock Margin="0,7,0,0">
+                            <Hyperlink NavigateUri="https://openrouter.ai/collections/image-models"
+                                       RequestNavigate="ImageModelsLink_RequestNavigate">
+                                OpenRouter Image Models 컬렉션 열기
+                            </Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,14,0,0">
+            <Button Content="취소" Width="90" Padding="10,7" Margin="0,0,8,0" IsCancel="True" />
+            <Button Content="저장"
+                    Width="90"
+                    Padding="10,7"
+                    Background="{StaticResource AccentBrush}"
+                    Foreground="White"
+                    BorderBrush="{StaticResource AccentBrush}"
+                    Click="SaveButton_Click" />
+        </StackPanel>
+    </Grid>
+</Window>
