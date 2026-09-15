@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -20,6 +21,10 @@ public partial class MainWindow : Window
         ".png", ".jpg", ".jpeg", ".bmp"
     };
 
+    private const double MinZoom = 1.0;
+    private const double MaxZoom = 8.0;
+    private const double ZoomStep = 1.15;
+
     private readonly ConversationStore _conversationStore = new();
     private readonly AppSettingsService _settingsService = new();
     private readonly OpenRouterImageService _openRouterImageService = new();
@@ -33,6 +38,14 @@ public partial class MainWindow : Window
     private Point _selectionStart;
     private Int32Rect? _selectionPixelRect;
     private ImageEditMode _editMode = ImageEditMode.Full;
+
+    private double _zoom = 1.0;
+    private double _panX;
+    private double _panY;
+    private bool _isPanning;
+    private Point _panStart;
+    private double _panStartX;
+    private double _panStartY;
 
     public MainWindow()
     {
@@ -192,6 +205,94 @@ public partial class MainWindow : Window
         }
     }
 
+    private void EditorSurface_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (_isBusy || EditorImage.Source is not BitmapSource)
+        {
+            return;
+        }
+
+        var factor = e.Delta > 0 ? ZoomStep : 1.0 / ZoomStep;
+        var nextZoom = Math.Clamp(_zoom * factor, MinZoom, MaxZoom);
+        if (Math.Abs(nextZoom - _zoom) < 0.001)
+        {
+            return;
+        }
+
+        _zoom = nextZoom;
+        if (_zoom <= MinZoom + 0.001)
+        {
+            _panX = 0;
+            _panY = 0;
+        }
+
+        ApplyViewportTransform();
+        OperationStatusTextBlock.Text = $"확대: {_zoom * 100:F0}% · 가운데 버튼 드래그로 이동";
+        e.Handled = true;
+    }
+
+    private void EditorSurface_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_isBusy || e.ChangedButton != MouseButton.Middle || EditorImage.Source is not BitmapSource)
+        {
+            return;
+        }
+
+        _isPanning = true;
+        _panStart = e.GetPosition(EditorSurface);
+        _panStartX = _panX;
+        _panStartY = _panY;
+        EditorSurface.CaptureMouse();
+        EditorSurface.Cursor = Cursors.Hand;
+        e.Handled = true;
+    }
+
+    private void EditorSurface_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isPanning)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(EditorSurface);
+        _panX = _panStartX + point.X - _panStart.X;
+        _panY = _panStartY + point.Y - _panStart.Y;
+        ApplyViewportTransform();
+        e.Handled = true;
+    }
+
+    private void EditorSurface_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isPanning || e.ChangedButton != MouseButton.Middle)
+        {
+            return;
+        }
+
+        _isPanning = false;
+        EditorSurface.ReleaseMouseCapture();
+        EditorSurface.Cursor = Cursors.Arrow;
+        e.Handled = true;
+    }
+
+    private void ApplyViewportTransform()
+    {
+        ViewportScaleTransform.ScaleX = _zoom;
+        ViewportScaleTransform.ScaleY = _zoom;
+        ViewportTranslateTransform.X = _panX;
+        ViewportTranslateTransform.Y = _panY;
+    }
+
+    private void ResetViewportTransform()
+    {
+        _zoom = 1.0;
+        _panX = 0;
+        _panY = 0;
+        _isPanning = false;
+        EditorSurface.ReleaseMouseCapture();
+        EditorSurface.Cursor = Cursors.Arrow;
+        ApplyViewportTransform();
+    }
+
     private void SelectionCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (_isBusy || _editMode == ImageEditMode.Full || EditorImage.Source is not BitmapSource)
@@ -214,6 +315,7 @@ public partial class MainWindow : Window
         _isSelecting = true;
         _selectionStart = point;
         _selectionPixelRect = null;
+        HideSelectionHandles();
         SelectionCanvas.CaptureMouse();
         UpdateSelectionVisual(point, point);
         e.Handled = true;
@@ -249,14 +351,76 @@ public partial class MainWindow : Window
 
         _selectionPixelRect = VisualRectToPixelRect(selectedVisualRect, imageRect);
         RenderSelectionRectangle();
+        UpdateSelectionStatus();
+        e.Handled = true;
+    }
 
-        if (_selectionPixelRect is { } selection)
+    private void SelectionMoveThumb_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        if (_isBusy || _selectionPixelRect is not { } selection || EditorImage.Source is not BitmapSource bitmap)
         {
-            OperationStatusTextBlock.Text =
-                $"선택 영역: X {selection.X}, Y {selection.Y}, {selection.Width} × {selection.Height}px";
+            return;
         }
 
-        e.Handled = true;
+        var imageRect = GetDisplayedImageRect();
+        if (imageRect.IsEmpty)
+        {
+            return;
+        }
+
+        var deltaX = (int)Math.Round(e.HorizontalChange * bitmap.PixelWidth / imageRect.Width);
+        var deltaY = (int)Math.Round(e.VerticalChange * bitmap.PixelHeight / imageRect.Height);
+        var x = Math.Clamp(selection.X + deltaX, 0, bitmap.PixelWidth - selection.Width);
+        var y = Math.Clamp(selection.Y + deltaY, 0, bitmap.PixelHeight - selection.Height);
+
+        _selectionPixelRect = new Int32Rect(x, y, selection.Width, selection.Height);
+        RenderSelectionRectangle();
+        UpdateSelectionStatus();
+    }
+
+    private void SelectionResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        if (_isBusy || sender is not Thumb { Tag: string handle } ||
+            _selectionPixelRect is not { } selection || EditorImage.Source is not BitmapSource bitmap)
+        {
+            return;
+        }
+
+        var imageRect = GetDisplayedImageRect();
+        if (imageRect.IsEmpty)
+        {
+            return;
+        }
+
+        var deltaX = (int)Math.Round(e.HorizontalChange * bitmap.PixelWidth / imageRect.Width);
+        var deltaY = (int)Math.Round(e.VerticalChange * bitmap.PixelHeight / imageRect.Height);
+        var left = selection.X;
+        var top = selection.Y;
+        var right = selection.X + selection.Width;
+        var bottom = selection.Y + selection.Height;
+        const int minSize = 2;
+
+        if (handle.Contains('L'))
+        {
+            left = Math.Clamp(left + deltaX, 0, right - minSize);
+        }
+        else
+        {
+            right = Math.Clamp(right + deltaX, left + minSize, bitmap.PixelWidth);
+        }
+
+        if (handle.Contains('T'))
+        {
+            top = Math.Clamp(top + deltaY, 0, bottom - minSize);
+        }
+        else
+        {
+            bottom = Math.Clamp(bottom + deltaY, top + minSize, bitmap.PixelHeight);
+        }
+
+        _selectionPixelRect = new Int32Rect(left, top, right - left, bottom - top);
+        RenderSelectionRectangle();
+        UpdateSelectionStatus();
     }
 
     private async void EditImageButton_Click(object sender, RoutedEventArgs e)
@@ -525,6 +689,7 @@ public partial class MainWindow : Window
         _isSelecting = false;
         SelectionCanvas.ReleaseMouseCapture();
         SelectionRectangle.Visibility = Visibility.Collapsed;
+        HideSelectionHandles();
         if (updateStatus)
         {
             SetEditMode(_editMode);
@@ -565,6 +730,7 @@ public partial class MainWindow : Window
         if (_selectionPixelRect is not { } selection || EditorImage.Source is not BitmapSource bitmap)
         {
             SelectionRectangle.Visibility = Visibility.Collapsed;
+            HideSelectionHandles();
             return;
         }
 
@@ -587,6 +753,37 @@ public partial class MainWindow : Window
         SelectionRectangle.Width = visualRect.Width;
         SelectionRectangle.Height = visualRect.Height;
         SelectionRectangle.Visibility = Visibility.Visible;
+        PositionSelectionHandles(visualRect);
+    }
+
+    private void PositionSelectionHandles(Rect visualRect)
+    {
+        SelectionMoveThumb.Visibility = Visibility.Visible;
+        Canvas.SetLeft(SelectionMoveThumb, visualRect.Left);
+        Canvas.SetTop(SelectionMoveThumb, visualRect.Top);
+        SelectionMoveThumb.Width = visualRect.Width;
+        SelectionMoveThumb.Height = visualRect.Height;
+
+        PositionResizeThumb(SelectionTopLeftThumb, visualRect.Left, visualRect.Top);
+        PositionResizeThumb(SelectionTopRightThumb, visualRect.Right, visualRect.Top);
+        PositionResizeThumb(SelectionBottomLeftThumb, visualRect.Left, visualRect.Bottom);
+        PositionResizeThumb(SelectionBottomRightThumb, visualRect.Right, visualRect.Bottom);
+    }
+
+    private static void PositionResizeThumb(Thumb thumb, double x, double y)
+    {
+        Canvas.SetLeft(thumb, x - thumb.Width / 2.0);
+        Canvas.SetTop(thumb, y - thumb.Height / 2.0);
+        thumb.Visibility = Visibility.Visible;
+    }
+
+    private void HideSelectionHandles()
+    {
+        SelectionMoveThumb.Visibility = Visibility.Collapsed;
+        SelectionTopLeftThumb.Visibility = Visibility.Collapsed;
+        SelectionTopRightThumb.Visibility = Visibility.Collapsed;
+        SelectionBottomLeftThumb.Visibility = Visibility.Collapsed;
+        SelectionBottomRightThumb.Visibility = Visibility.Collapsed;
     }
 
     private void UpdateSelectionVisual(Point start, Point end)
@@ -597,6 +794,14 @@ public partial class MainWindow : Window
         SelectionRectangle.Width = rect.Width;
         SelectionRectangle.Height = rect.Height;
         SelectionRectangle.Visibility = Visibility.Visible;
+    }
+
+    private void UpdateSelectionStatus()
+    {
+        if (_selectionPixelRect is { } selection)
+        {
+            OperationStatusTextBlock.Text = $"선택 영역: X {selection.X}, Y {selection.Y}, {selection.Width} × {selection.Height}px";
+        }
     }
 
     private static Rect NormalizeRect(Point a, Point b) =>
@@ -698,7 +903,10 @@ public partial class MainWindow : Window
             FontSize = 10
         });
 
-        var contentGrid = new Grid();
+        var contentGrid = new Grid
+        {
+            ClipToBounds = true
+        };
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -856,6 +1064,7 @@ public partial class MainWindow : Window
 
     private void ShowImage(string imagePath)
     {
+        ResetViewportTransform();
         EditorImage.Source = LoadBitmap(imagePath);
         EditorImage.Visibility = Visibility.Visible;
         CanvasPlaceholder.Visibility = Visibility.Collapsed;
@@ -876,6 +1085,7 @@ public partial class MainWindow : Window
         _currentConversation = null;
         _currentImagePath = null;
         _showingOriginal = false;
+        ResetViewportTransform();
         EditorImage.Source = null;
         EditorImage.Visibility = Visibility.Collapsed;
         CanvasPlaceholder.Visibility = Visibility.Visible;
