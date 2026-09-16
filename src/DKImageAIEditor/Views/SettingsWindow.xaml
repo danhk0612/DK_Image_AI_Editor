@@ -27,10 +27,32 @@
                                Foreground="#6F7785" />
 
                     <TextBlock Text="API Key" FontWeight="SemiBold" />
-                    <PasswordBox x:Name="ApiKeyPasswordBox"
-                                 Margin="0,7,0,6"
+                    <Grid Margin="0,7,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <PasswordBox x:Name="ApiKeyPasswordBox"
+                                     Grid.Column="0"
+                                     Height="34"
+                                     Padding="8,5"
+                                     Margin="0,0,8,0" />
+                        <TextBox x:Name="ApiKeyTextBox"
+                                 Grid.Column="0"
                                  Height="34"
-                                 Padding="8,5" />
+                                 Padding="8,5"
+                                 Margin="0,0,8,0"
+                                 Visibility="Collapsed"
+                                 VerticalContentAlignment="Center" />
+                        <Button x:Name="ToggleApiKeyVisibilityButton"
+                                Grid.Column="1"
+                                Width="40"
+                                Height="34"
+                                Content="👁"
+                                FontSize="15"
+                                ToolTip="API Key 표시/숨김"
+                                Click="ToggleApiKeyVisibilityButton_Click" />
+                    </Grid>
                     <TextBlock Text="API Key는 Windows 자격 증명 관리자에 저장됩니다."
                                Foreground="#7A8290"
                                FontSize="12"
