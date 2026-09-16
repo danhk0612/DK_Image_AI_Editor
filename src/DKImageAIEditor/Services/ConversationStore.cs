@@ -67,23 +67,47 @@ public sealed class ConversationStore
 
     public IReadOnlyList<ConversationRecord> GetConversations()
     {
-        var conversations = new List<ConversationRecord>();
+        var storedConversations = new List<ConversationRecord>();
 
-        using var connection = OpenConnection();
-        using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT Id, Title, OriginalImagePath, CurrentImagePath, CreatedAt, UpdatedAt
-            FROM Conversations
-            ORDER BY UpdatedAt DESC;
-            """;
-
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
+        using (var connection = OpenConnection())
+        using (var command = connection.CreateCommand())
         {
-            conversations.Add(ReadConversation(reader));
+            command.CommandText = """
+                SELECT Id, Title, OriginalImagePath, CurrentImagePath, CreatedAt, UpdatedAt
+                FROM Conversations
+                ORDER BY UpdatedAt DESC;
+                """;
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                storedConversations.Add(ReadConversation(reader));
+            }
         }
 
-        return conversations;
+        var availableConversations = new List<ConversationRecord>(storedConversations.Count);
+        foreach (var conversation in storedConversations)
+        {
+            var currentImagePath = ResolveExistingImagePath(conversation);
+            if (currentImagePath is null)
+            {
+                continue;
+            }
+
+            var originalImagePath = File.Exists(conversation.OriginalImagePath)
+                ? conversation.OriginalImagePath
+                : currentImagePath;
+
+            availableConversations.Add(new ConversationRecord(
+                conversation.Id,
+                conversation.Title,
+                originalImagePath,
+                currentImagePath,
+                conversation.CreatedAt,
+                conversation.UpdatedAt));
+        }
+
+        return availableConversations;
     }
 
     public ConversationRecord? GetConversation(string id)
@@ -246,6 +270,40 @@ public sealed class ConversationStore
                     MessageBoxImage.Warning);
             }
         }
+    }
+
+    private string? ResolveExistingImagePath(ConversationRecord conversation)
+    {
+        if (File.Exists(conversation.CurrentImagePath))
+        {
+            return conversation.CurrentImagePath;
+        }
+
+        using (var connection = OpenConnection())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT OutputImagePath
+                FROM Edits
+                WHERE ConversationId = $conversationId
+                ORDER BY SequenceNumber DESC;
+                """;
+            command.Parameters.AddWithValue("$conversationId", conversation.Id);
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var outputImagePath = reader.GetString(0);
+                if (File.Exists(outputImagePath))
+                {
+                    return outputImagePath;
+                }
+            }
+        }
+
+        return File.Exists(conversation.OriginalImagePath)
+            ? conversation.OriginalImagePath
+            : null;
     }
 
     private string GetConversationDirectory(string sourceImagePath, string id, AppSettings settings)
