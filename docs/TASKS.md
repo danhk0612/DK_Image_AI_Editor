@@ -149,13 +149,16 @@
 ## T13 마무리 / 배포
 
 - [x] 버전 0.5.0 메타데이터 적용
-- [x] Windows x64 self-contained single-file Publish 프로필
+- [x] v1.0.0 정식 릴리스 배포
+- [x] v1.0.1 메타데이터 적용
+- [x] Windows x64 self-contained multi-file Publish 프로필
+- [x] 시작/런타임 치명 오류 로그 저장
 - [x] `publish.ps1` 빌드 + Publish + ZIP 패키징
 - [x] GitHub Actions main 자동 Windows 빌드/패키징
 - [x] `release:` 커밋 또는 수동 실행 시 GitHub Release 자동 생성
 - [x] GitHub Actions Windows x64 빌드/ZIP 패키징 성공 검증
-- [x] v0.5.0 GitHub Release 자동 배포
-- [ ] 배포 EXE 실기기 실행 검증
+- [-] v1.0.1 핫픽스 정식 배포 진행
+- [ ] v1.0.1 배포본 실기기 실행 검증
 - [ ] 설정/API Key 저장 후 프로그램 재실행 검증
 - [ ] Custom 모델 테스트
 - [x] README 사용법 갱신
