@@ -2,7 +2,7 @@
 
 Windows용 OpenRouter 기반 대화형 이미지 편집기입니다.
 
-현재 정식 버전: **v1.0.1**
+현재 정식 버전: **v1.0.2**
 
 한 이미지에서 대화를 시작하고 한국어 자연어로 반복 수정할 수 있으며, 전체 편집·사각형 영역 편집·선택 영역 Crop 편집을 지원합니다.
 
@@ -42,6 +42,7 @@ Windows용 OpenRouter 기반 대화형 이미지 편집기입니다.
 - 최근 대화를 위쪽에 정렬하고 실행 시 최신 대화 자동 선택
 - 대화 선택 시 최신 작업 위치로 자동 스크롤
 - 좌측 대화 목록에 최신 결과 썸네일과 최신 프롬프트 표시
+- 연결된 이미지 파일이 사라진 대화는 시작 시 건너뛰고 나머지 대화 정상 복원
 - 한국어 자연어 이미지 수정
 - 과거 결과 이미지 선택 후 해당 이미지를 기준으로 추가 편집
 - 기존 작업 `다시 시도` 및 재시도 모델 선택
@@ -107,19 +108,23 @@ dotnet run --project .\src\DKImageAIEditor\DKImageAIEditor.csproj -c Release
 
 ## Windows x64 배포
 
-루트의 `publish.ps1`을 실행합니다.
+루트의 `publish.ps1`을 실행하면 두 종류의 self-contained 패키지를 만듭니다.
 
 ```powershell
 .\publish.ps1
 ```
 
-출력 위치:
+배포 파일:
 
 ```text
-src\DKImageAIEditor\bin\Release\net8.0-windows\win-x64\publish\
+dist\DK-Image-AI-Editor-vX.Y.Z-win-x64.zip
+dist\DK-Image-AI-Editor-vX.Y.Z-win-x64-single.exe
 ```
 
-배포 프로필은 `win-x64`, self-contained, multi-file 구성을 사용합니다. 대상 PC에 별도 .NET 8 Runtime 설치는 필요하지 않으며, ZIP을 통째로 압축 해제한 뒤 `DKImageAIEditor.exe`를 실행해야 합니다.
+- `win-x64.zip`: **권장 안정판**. self-contained multi-file 방식이며 ZIP 전체를 압축 해제한 뒤 `DKImageAIEditor.exe`를 실행합니다.
+- `win-x64-single.exe`: 단일 EXE 편의/검증용 self-contained 빌드입니다. SQLite 네이티브 구성 요소는 실행 시 임시 위치에 추출될 수 있습니다.
+
+두 방식 모두 대상 PC에 별도 .NET 8 Runtime 설치는 필요하지 않습니다.
 
 ## 데이터 저장
 
