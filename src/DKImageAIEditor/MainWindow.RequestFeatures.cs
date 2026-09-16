@@ -9,26 +9,24 @@ namespace DKImageAIEditor;
 
 public partial class MainWindow
 {
-    private bool _retryModelSelectorHooked;
-
     private sealed record RetryEditContext(EditRecord Edit, ComboBox ModelSelector);
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         RefreshRequestModelSelector();
         EnhanceRetryModelSelectors();
-
-        if (!_retryModelSelectorHooked)
-        {
-            ChatHistoryPanel.LayoutUpdated += ChatHistoryPanel_LayoutUpdated;
-            _retryModelSelectorHooked = true;
-        }
+        ConversationList.SelectionChanged += ConversationList_RetryModelSelectorSelectionChanged;
     }
 
     private void SettingsButtonWithRefresh_Click(object sender, RoutedEventArgs e)
     {
         SettingsButton_Click(sender, e);
         RefreshRequestModelSelector();
+        EnhanceRetryModelSelectors();
+    }
+
+    private void ConversationList_RetryModelSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
         EnhanceRetryModelSelectors();
     }
 
@@ -108,11 +106,6 @@ public partial class MainWindow
             selectedModelId,
             _editMode,
             _selectionPixelRect);
-    }
-
-    private void ChatHistoryPanel_LayoutUpdated(object? sender, EventArgs e)
-    {
-        EnhanceRetryModelSelectors();
     }
 
     private void EnhanceRetryModelSelectors()
