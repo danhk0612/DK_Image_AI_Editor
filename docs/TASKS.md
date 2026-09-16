@@ -97,6 +97,7 @@
 - [x] 가로 스크롤 제거
 - [x] 삭제 확인
 - [x] 대화 기록 삭제와 이미지 폴더 삭제를 분리
+- [x] 연결 이미지가 사라진 대화는 시작 시 건너뛰고 나머지 대화 복원
 
 ## T08 이미지 캔버스
 
@@ -150,15 +151,18 @@
 
 - [x] 버전 0.5.0 메타데이터 적용
 - [x] v1.0.0 정식 릴리스 배포
-- [x] v1.0.1 메타데이터 적용
-- [x] Windows x64 self-contained multi-file Publish 프로필
+- [x] v1.0.1 정식 릴리스 배포
+- [x] v1.0.2 메타데이터 적용
+- [x] Windows x64 self-contained multi-file 안정판 Publish
+- [x] Windows x64 self-contained single-file 편의/검증용 Publish
 - [x] 시작/런타임 치명 오류 로그 저장
-- [x] `publish.ps1` 빌드 + Publish + ZIP 패키징
+- [x] `publish.ps1` 안정판 ZIP + single EXE 동시 패키징
 - [x] GitHub Actions main 자동 Windows 빌드/패키징
 - [x] `release:` 커밋 또는 수동 실행 시 GitHub Release 자동 생성
-- [x] GitHub Actions Windows x64 빌드/ZIP 패키징 성공 검증
-- [-] v1.0.1 핫픽스 정식 배포 진행
-- [ ] v1.0.1 배포본 실기기 실행 검증
+- [x] GitHub Actions에서 안정판 ZIP + single EXE 생성 검증
+- [-] v1.0.2 듀얼 패키지 정식 배포 진행
+- [ ] v1.0.2 안정판 실기기 실행 검증
+- [ ] v1.0.2 single EXE 실기기 실행 검증
 - [ ] 설정/API Key 저장 후 프로그램 재실행 검증
 - [ ] Custom 모델 테스트
 - [x] README 사용법 갱신
