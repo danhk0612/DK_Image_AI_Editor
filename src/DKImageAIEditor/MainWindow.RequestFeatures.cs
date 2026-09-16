@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using DKImageAIEditor.Models;
 using DKImageAIEditor.Services;
 
@@ -27,8 +28,22 @@ public partial class MainWindow
         RegionEditModeButton.IsEnabledChanged += EditModeButton_IsEnabledChanged;
         CropEditModeButton.IsEnabledChanged += EditModeButton_IsEnabledChanged;
         OperationProgressBar.IsVisibleChanged += OperationProgressBar_IsVisibleChanged;
+        ConversationList.SelectionChanged += ConversationList_ScrollLatest_SelectionChanged;
         UpdateEditModeButtonVisuals();
         RefreshRequestModelSelector();
+        ScheduleHistoryScrollToEnd();
+    }
+
+    private void ConversationList_ScrollLatest_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        ScheduleHistoryScrollToEnd();
+    }
+
+    private void ScheduleHistoryScrollToEnd()
+    {
+        Dispatcher.BeginInvoke(
+            new Action(() => ChatHistoryScrollViewer.ScrollToEnd()),
+            DispatcherPriority.Loaded);
     }
 
     private void SettingsButtonWithRefresh_Click(object sender, RoutedEventArgs e)
