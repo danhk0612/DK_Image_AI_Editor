@@ -110,6 +110,8 @@ public partial class MainWindow
 
     private void EnhanceRetryModelSelectors()
     {
+        var secondaryButtonStyle = Application.Current.TryFindResource("SecondaryButtonStyle") as Style;
+
         foreach (var retryButton in FindDescendants<Button>(ChatHistoryPanel)
                      .Where(button =>
                          string.Equals(button.Content?.ToString(), "다시 시도", StringComparison.Ordinal) &&
@@ -133,6 +135,12 @@ public partial class MainWindow
             if (continueButton is null)
             {
                 continue;
+            }
+
+            if (secondaryButtonStyle is not null)
+            {
+                continueButton.Style = secondaryButtonStyle;
+                retryButton.Style = secondaryButtonStyle;
             }
 
             var options = BuildRetryModelOptions(edit.ModelId, out var selectedOption);
@@ -190,6 +198,30 @@ public partial class MainWindow
             retryButton.Click -= RetryEditButton_Click;
             retryButton.Click += RetryEditWithModelButton_Click;
             retryButton.Tag = new RetryEditContext(edit, selector);
+        }
+
+        ApplyConversationDeleteButtonStyle(secondaryButtonStyle);
+    }
+
+    private void ApplyConversationDeleteButtonStyle(Style? secondaryButtonStyle)
+    {
+        if (secondaryButtonStyle is null)
+        {
+            return;
+        }
+
+        foreach (var item in ConversationList.Items.OfType<ListBoxItem>())
+        {
+            if (item.Content is not DependencyObject content)
+            {
+                continue;
+            }
+
+            foreach (var button in FindDescendants<Button>(content)
+                         .Where(button => string.Equals(button.Content?.ToString(), "삭제", StringComparison.Ordinal)))
+            {
+                button.Style = secondaryButtonStyle;
+            }
         }
     }
 
