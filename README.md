@@ -2,7 +2,7 @@
 
 Windows용 OpenRouter 기반 대화형 이미지 편집기입니다.
 
-현재 정식 버전: **v1.0.0**
+현재 정식 버전: **v1.0.1**
 
 한 이미지에서 대화를 시작하고 한국어 자연어로 반복 수정할 수 있으며, 전체 편집·사각형 영역 편집·선택 영역 Crop 편집을 지원합니다.
 
@@ -67,6 +67,7 @@ Windows용 OpenRouter 기반 대화형 이미지 편집기입니다.
 - OpenRouter 오류 유형별 한국어 안내
 - OpenRouter API Key를 Windows Credential Manager에 저장
 - 설정에서 API Key 표시/숨김 토글
+- 시작/런타임 치명 오류 로그 저장
 
 ## 기본 사용법
 
@@ -118,7 +119,7 @@ dotnet run --project .\src\DKImageAIEditor\DKImageAIEditor.csproj -c Release
 src\DKImageAIEditor\bin\Release\net8.0-windows\win-x64\publish\
 ```
 
-배포 프로필은 `win-x64`, self-contained, single-file 구성을 사용합니다. 따라서 대상 PC에 별도 .NET 8 Runtime 설치가 없어도 실행할 수 있도록 구성되어 있습니다.
+배포 프로필은 `win-x64`, self-contained, multi-file 구성을 사용합니다. 대상 PC에 별도 .NET 8 Runtime 설치는 필요하지 않으며, ZIP을 통째로 압축 해제한 뒤 `DKImageAIEditor.exe`를 실행해야 합니다.
 
 ## 데이터 저장
 
@@ -128,6 +129,7 @@ src\DKImageAIEditor\bin\Release\net8.0-windows\win-x64\publish\
 %LOCALAPPDATA%\DKImageAIEditor\
 ├─ settings.json
 ├─ editor.db
+├─ Logs\
 └─ Conversations\
    └─ {conversation-id}\
       ├─ original.*
@@ -141,6 +143,8 @@ src\DKImageAIEditor\bin\Release\net8.0-windows\win-x64\publish\
 원본 확장자와 모델 출력 형식에 따라 실제 확장자는 달라질 수 있습니다.
 
 OpenRouter API Key는 `settings.json`에 평문으로 저장하지 않고 Windows Credential Manager를 사용합니다.
+
+시작 또는 실행 중 치명 오류가 발생하면 `%LOCALAPPDATA%\DKImageAIEditor\Logs`에 로그를 남깁니다.
 
 ## 작업 상태
 
