@@ -123,10 +123,20 @@ public partial class MainWindow
                          button.Tag is EditRecord)
                      .ToList())
         {
-            if (retryButton.Tag is not EditRecord edit ||
-                FindAncestor<StackPanel>(retryButton) is not { } buttonRow)
+            if (retryButton.Tag is not EditRecord edit || retryButton.Parent is not Panel currentRow)
             {
                 continue;
+            }
+
+            var buttonRow = EnsureResponsiveHistoryActionRow(currentRow);
+            foreach (var continueButton in buttonRow.Children
+                         .OfType<Button>()
+                         .Where(button => string.Equals(
+                             button.Content?.ToString(),
+                             "이 이미지에서 계속",
+                             StringComparison.Ordinal)))
+            {
+                continueButton.MinWidth = 108;
             }
 
             var options = BuildRetryModelOptions(edit.ModelId, out var selectedOption);
@@ -135,9 +145,9 @@ public partial class MainWindow
                 ItemsSource = options,
                 DisplayMemberPath = nameof(OpenRouterModelPreset.DisplayName),
                 SelectedItem = selectedOption,
-                Width = 175,
+                Width = 160,
                 MinHeight = 28,
-                Margin = new Thickness(0, 0, 6, 0),
+                Margin = new Thickness(0, 0, 6, 6),
                 ToolTip = "다시 시도에 사용할 모델"
             };
 
@@ -148,6 +158,43 @@ public partial class MainWindow
             retryButton.Click += RetryEditWithModelButton_Click;
             retryButton.Tag = new RetryEditContext(edit, selector);
         }
+    }
+
+    private static Panel EnsureResponsiveHistoryActionRow(Panel currentRow)
+    {
+        if (currentRow is WrapPanel)
+        {
+            return currentRow;
+        }
+
+        if (currentRow is not StackPanel stackPanel || stackPanel.Parent is not Panel parentPanel)
+        {
+            return currentRow;
+        }
+
+        var rowIndex = parentPanel.Children.IndexOf(stackPanel);
+        if (rowIndex < 0)
+        {
+            return currentRow;
+        }
+
+        var wrapPanel = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = stackPanel.HorizontalAlignment,
+            Margin = stackPanel.Margin
+        };
+
+        var children = stackPanel.Children.Cast<UIElement>().ToList();
+        stackPanel.Children.Clear();
+        foreach (var child in children)
+        {
+            wrapPanel.Children.Add(child);
+        }
+
+        parentPanel.Children.RemoveAt(rowIndex);
+        parentPanel.Children.Insert(rowIndex, wrapPanel);
+        return wrapPanel;
     }
 
     private IReadOnlyList<OpenRouterModelPreset> BuildRetryModelOptions(
