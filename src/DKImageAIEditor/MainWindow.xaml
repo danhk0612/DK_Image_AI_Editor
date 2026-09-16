@@ -68,7 +68,6 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top header -->
         <Border Grid.Row="0"
                 Background="#2D3B51"
                 BorderBrush="#223044"
@@ -84,14 +83,8 @@
                         <Image Source="{StaticResource AppIcon}" Width="30" Height="30" />
                     </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="DK Image AI Editor"
-                                   Foreground="White"
-                                   FontSize="18"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="OpenRouter 기반 이미지 편집"
-                                   Foreground="#B9C5D5"
-                                   FontSize="11"
-                                   Margin="0,2,0,0" />
+                        <TextBlock Text="DK Image AI Editor" Foreground="White" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="OpenRouter 기반 이미지 편집" Foreground="#B9C5D5" FontSize="11" Margin="0,2,0,0" />
                     </StackPanel>
                 </StackPanel>
 
@@ -104,7 +97,6 @@
             </Grid>
         </Border>
 
-        <!-- Main body -->
         <Grid Grid.Row="1" Margin="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="250" MinWidth="190" MaxWidth="310" />
@@ -114,7 +106,6 @@
                 <ColumnDefinition Width="350" MinWidth="300" MaxWidth="440" />
             </Grid.ColumnDefinitions>
 
-            <!-- Left conversation sidebar -->
             <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -133,15 +124,10 @@
                             HorizontalContentAlignment="Center"
                             Click="NewConversationButton_Click" />
 
-                    <Border Grid.Row="1"
-                            BorderBrush="#E4E8EE"
-                            BorderThickness="0,1,0,1"
-                            Padding="14,10">
+                    <Border Grid.Row="1" BorderBrush="#E4E8EE" BorderThickness="0,1,0,1" Padding="14,10">
                         <StackPanel>
                             <TextBlock Text="이미지 대화" Style="{StaticResource SectionTitleStyle}" />
-                            <TextBlock Text="썸네일과 최신 요청 기준"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Margin="0,3,0,0" />
+                            <TextBlock Text="썸네일과 최신 요청 기준" Style="{StaticResource MutedTextStyle}" Margin="0,3,0,0" />
                         </StackPanel>
                     </Border>
 
@@ -156,24 +142,15 @@
                         <ListBoxItem IsEnabled="False" Padding="10">
                             <StackPanel>
                                 <TextBlock Text="대화가 없습니다." FontWeight="SemiBold" />
-                                <TextBlock Text="새 대화에서 이미지를 선택하세요."
-                                           Margin="0,4,0,0"
-                                           Foreground="#7A8290"
-                                           TextWrapping="Wrap" />
+                                <TextBlock Text="새 대화에서 이미지를 선택하세요." Margin="0,4,0,0" Foreground="#7A8290" TextWrapping="Wrap" />
                             </StackPanel>
                         </ListBoxItem>
                     </ListBox>
                 </Grid>
             </Border>
 
-            <GridSplitter Grid.Column="1"
-                          Width="6"
-                          HorizontalAlignment="Stretch"
-                          Background="Transparent"
-                          ResizeDirection="Columns"
-                          ResizeBehavior="PreviousAndNext" />
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
 
-            <!-- Center editor -->
             <Border Grid.Column="2" Style="{StaticResource PanelBorderStyle}" ClipToBounds="True">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -182,33 +159,15 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- Editing mode toolbar -->
-                    <Border Grid.Row="0"
-                            Background="#FAFBFC"
-                            BorderBrush="#E1E6ED"
-                            BorderThickness="0,0,0,1"
-                            Padding="10,8">
+                    <Border Grid.Row="0" Background="#FAFBFC" BorderBrush="#E1E6ED" BorderThickness="0,0,0,1" Padding="10,8">
                         <WrapPanel VerticalAlignment="Center">
-                            <TextBlock Text="편집 방식"
-                                       Style="{StaticResource SectionTitleStyle}"
-                                       VerticalAlignment="Center"
-                                       Margin="4,0,10,0" />
-                            <Button x:Name="FullEditModeButton"
-                                    Content="전체 이미지"
-                                    Style="{StaticResource ToolbarButtonStyle}"
-                                    Click="FullEditModeButton_Click" />
-                            <Button x:Name="RegionEditModeButton"
-                                    Content="영역 편집"
-                                    Style="{StaticResource ToolbarButtonStyle}"
-                                    Click="RegionEditModeButton_Click" />
-                            <Button x:Name="CropEditModeButton"
-                                    Content="잘라서 편집"
-                                    Style="{StaticResource ToolbarButtonStyle}"
-                                    Click="CropEditModeButton_Click" />
+                            <TextBlock Text="편집 방식" Style="{StaticResource SectionTitleStyle}" VerticalAlignment="Center" Margin="4,0,10,0" />
+                            <Button x:Name="FullEditModeButton" Content="전체 이미지" Style="{StaticResource ToolbarButtonStyle}" Click="FullEditModeButton_Click" />
+                            <Button x:Name="RegionEditModeButton" Content="영역 편집" Style="{StaticResource ToolbarButtonStyle}" Click="RegionEditModeButton_Click" />
+                            <Button x:Name="CropEditModeButton" Content="잘라서 편집" Style="{StaticResource ToolbarButtonStyle}" Click="CropEditModeButton_Click" />
                         </WrapPanel>
                     </Border>
 
-                    <!-- Canvas -->
                     <Grid x:Name="EditorSurface"
                           Grid.Row="1"
                           Margin="10"
@@ -218,10 +177,7 @@
                           MouseDown="EditorSurface_MouseDown"
                           MouseMove="EditorSurface_MouseMove"
                           MouseUp="EditorSurface_MouseUp">
-                        <Grid x:Name="ImageViewport"
-                              Margin="12"
-                              ClipToBounds="True"
-                              RenderTransformOrigin="0.5,0.5">
+                        <Grid x:Name="ImageViewport" Margin="12" ClipToBounds="True" RenderTransformOrigin="0.5,0.5">
                             <Grid.RenderTransform>
                                 <TransformGroup>
                                     <ScaleTransform x:Name="ViewportScaleTransform" ScaleX="1" ScaleY="1" />
@@ -229,9 +185,7 @@
                                 </TransformGroup>
                             </Grid.RenderTransform>
 
-                            <Image x:Name="EditorImage"
-                                   Stretch="Uniform"
-                                   Visibility="Collapsed" />
+                            <Image x:Name="EditorImage" Stretch="Uniform" Visibility="Collapsed" />
 
                             <Canvas x:Name="SelectionCanvas"
                                     Background="Transparent"
@@ -240,115 +194,36 @@
                                     MouseLeftButtonDown="SelectionCanvas_MouseLeftButtonDown"
                                     MouseMove="SelectionCanvas_MouseMove"
                                     MouseLeftButtonUp="SelectionCanvas_MouseLeftButtonUp">
-                                <Rectangle x:Name="SelectionRectangle"
-                                           Visibility="Collapsed"
-                                           Stroke="#FF58A6FF"
-                                           StrokeThickness="2"
-                                           Fill="#1858A6FF"
-                                           StrokeDashArray="4,2"
-                                           IsHitTestVisible="False"
-                                           Panel.ZIndex="0" />
-                                <Thumb x:Name="SelectionMoveThumb"
-                                       Visibility="Collapsed"
-                                       Cursor="SizeAll"
-                                       DragDelta="SelectionMoveThumb_DragDelta"
-                                       Panel.ZIndex="1">
-                                    <Thumb.Template>
-                                        <ControlTemplate TargetType="Thumb">
-                                            <Border Background="Transparent" />
-                                        </ControlTemplate>
-                                    </Thumb.Template>
+                                <Rectangle x:Name="SelectionRectangle" Visibility="Collapsed" Stroke="#FF58A6FF" StrokeThickness="2" Fill="#1858A6FF" StrokeDashArray="4,2" IsHitTestVisible="False" Panel.ZIndex="0" />
+                                <Thumb x:Name="SelectionMoveThumb" Visibility="Collapsed" Cursor="SizeAll" DragDelta="SelectionMoveThumb_DragDelta" Panel.ZIndex="1">
+                                    <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="Transparent" /></ControlTemplate></Thumb.Template>
                                 </Thumb>
-                                <Thumb x:Name="SelectionTopLeftThumb"
-                                       Tag="TL" Width="12" Height="12"
-                                       Visibility="Collapsed"
-                                       Background="White"
-                                       BorderBrush="#FF58A6FF"
-                                       BorderThickness="2"
-                                       Cursor="SizeNWSE"
-                                       DragDelta="SelectionResizeThumb_DragDelta"
-                                       Panel.ZIndex="2" />
-                                <Thumb x:Name="SelectionTopRightThumb"
-                                       Tag="TR" Width="12" Height="12"
-                                       Visibility="Collapsed"
-                                       Background="White"
-                                       BorderBrush="#FF58A6FF"
-                                       BorderThickness="2"
-                                       Cursor="SizeNESW"
-                                       DragDelta="SelectionResizeThumb_DragDelta"
-                                       Panel.ZIndex="2" />
-                                <Thumb x:Name="SelectionBottomLeftThumb"
-                                       Tag="BL" Width="12" Height="12"
-                                       Visibility="Collapsed"
-                                       Background="White"
-                                       BorderBrush="#FF58A6FF"
-                                       BorderThickness="2"
-                                       Cursor="SizeNESW"
-                                       DragDelta="SelectionResizeThumb_DragDelta"
-                                       Panel.ZIndex="2" />
-                                <Thumb x:Name="SelectionBottomRightThumb"
-                                       Tag="BR" Width="12" Height="12"
-                                       Visibility="Collapsed"
-                                       Background="White"
-                                       BorderBrush="#FF58A6FF"
-                                       BorderThickness="2"
-                                       Cursor="SizeNWSE"
-                                       DragDelta="SelectionResizeThumb_DragDelta"
-                                       Panel.ZIndex="2" />
+                                <Thumb x:Name="SelectionTopLeftThumb" Tag="TL" Width="12" Height="12" Visibility="Collapsed" Background="White" BorderBrush="#FF58A6FF" BorderThickness="2" Cursor="SizeNWSE" DragDelta="SelectionResizeThumb_DragDelta" Panel.ZIndex="2" />
+                                <Thumb x:Name="SelectionTopRightThumb" Tag="TR" Width="12" Height="12" Visibility="Collapsed" Background="White" BorderBrush="#FF58A6FF" BorderThickness="2" Cursor="SizeNESW" DragDelta="SelectionResizeThumb_DragDelta" Panel.ZIndex="2" />
+                                <Thumb x:Name="SelectionBottomLeftThumb" Tag="BL" Width="12" Height="12" Visibility="Collapsed" Background="White" BorderBrush="#FF58A6FF" BorderThickness="2" Cursor="SizeNESW" DragDelta="SelectionResizeThumb_DragDelta" Panel.ZIndex="2" />
+                                <Thumb x:Name="SelectionBottomRightThumb" Tag="BR" Width="12" Height="12" Visibility="Collapsed" Background="White" BorderBrush="#FF58A6FF" BorderThickness="2" Cursor="SizeNWSE" DragDelta="SelectionResizeThumb_DragDelta" Panel.ZIndex="2" />
                             </Canvas>
                         </Grid>
 
-                        <StackPanel x:Name="CanvasPlaceholder"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center">
-                            <Border Width="68" Height="68" CornerRadius="18" Background="#252C36" HorizontalAlignment="Center">
-                                <Image Source="{StaticResource AppIcon}" Width="46" Height="46" />
-                            </Border>
-                            <TextBlock Text="이미지를 열거나 이 창에 드래그해 놓으세요."
-                                       Foreground="#C5CDD8"
-                                       FontSize="15"
-                                       Margin="0,14,0,0"
-                                       HorizontalAlignment="Center" />
-                            <TextBlock Text="휠: 확대/축소  ·  가운데 버튼: 이동"
-                                       Foreground="#7E8998"
-                                       FontSize="11"
-                                       Margin="0,5,0,0"
-                                       HorizontalAlignment="Center" />
+                        <StackPanel x:Name="CanvasPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Border Width="68" Height="68" CornerRadius="18" Background="#252C36" HorizontalAlignment="Center"><Image Source="{StaticResource AppIcon}" Width="46" Height="46" /></Border>
+                            <TextBlock Text="이미지를 열거나 이 창에 드래그해 놓으세요." Foreground="#C5CDD8" FontSize="15" Margin="0,14,0,0" HorizontalAlignment="Center" />
+                            <TextBlock Text="휠: 확대/축소  ·  가운데 버튼: 이동" Foreground="#7E8998" FontSize="11" Margin="0,5,0,0" HorizontalAlignment="Center" />
                         </StackPanel>
                     </Grid>
 
-                    <!-- Bottom actions -->
-                    <Border Grid.Row="2"
-                            Background="#FAFBFC"
-                            BorderBrush="#E1E6ED"
-                            BorderThickness="0,1,0,0"
-                            Padding="9,7">
+                    <Border Grid.Row="2" Background="#FAFBFC" BorderBrush="#E1E6ED" BorderThickness="0,1,0,0" Padding="9,7">
                         <WrapPanel HorizontalAlignment="Center">
-                            <Button x:Name="SaveCurrentImageButton"
-                                    Content="↓  저장"
-                                    Style="{StaticResource ToolbarButtonStyle}"
-                                    Click="SaveCurrentImageButton_Click" />
-                            <Button x:Name="CompareOriginalButton"
-                                    Content="원본 비교"
-                                    Style="{StaticResource ToolbarButtonStyle}"
-                                    Click="CompareOriginalButton_Click" />
-                            <Button x:Name="ClearSelectionButton"
-                                    Content="선택 해제"
-                                    Style="{StaticResource ToolbarButtonStyle}"
-                                    Click="ClearSelectionButton_Click" />
+                            <Button x:Name="SaveCurrentImageButton" Content="↓  저장" Style="{StaticResource ToolbarButtonStyle}" Click="SaveCurrentImageButton_Click" />
+                            <Button x:Name="CompareOriginalButton" Content="원본 비교" Style="{StaticResource ToolbarButtonStyle}" Click="CompareOriginalButton_Click" />
+                            <Button x:Name="ClearSelectionButton" Content="선택 해제" Style="{StaticResource ToolbarButtonStyle}" Click="ClearSelectionButton_Click" />
                         </WrapPanel>
                     </Border>
                 </Grid>
             </Border>
 
-            <GridSplitter Grid.Column="3"
-                          Width="6"
-                          HorizontalAlignment="Stretch"
-                          Background="Transparent"
-                          ResizeDirection="Columns"
-                          ResizeBehavior="PreviousAndNext" />
+            <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Background="Transparent" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
 
-            <!-- Right history / prompt -->
             <Border Grid.Column="4" Style="{StaticResource PanelBorderStyle}">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -357,37 +232,26 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Border Grid.Row="0"
-                            BorderBrush="#E4E8EE"
-                            BorderThickness="0,0,0,1"
-                            Padding="14,12">
+                    <Border Grid.Row="0" BorderBrush="#E4E8EE" BorderThickness="0,0,0,1" Padding="14,12">
                         <StackPanel>
                             <TextBlock Text="현재 대화" Style="{StaticResource SectionTitleStyle}" />
-                            <TextBlock Text="요청/결과 기록 · 텍스트 클릭 시 복사"
-                                       Style="{StaticResource MutedTextStyle}"
-                                       Margin="0,3,0,0" />
+                            <TextBlock Text="요청/결과 기록 · 텍스트 클릭 시 복사" Style="{StaticResource MutedTextStyle}" Margin="0,3,0,0" />
                         </StackPanel>
                     </Border>
 
-                    <ScrollViewer Grid.Row="1"
+                    <ScrollViewer x:Name="ChatHistoryScrollViewer"
+                                  Grid.Row="1"
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled"
                                   Padding="12">
-                        <StackPanel x:Name="ChatHistoryPanel"
-                                    PreviewMouseLeftButtonUp="ChatHistoryPanel_PreviewMouseLeftButtonUp">
+                        <StackPanel x:Name="ChatHistoryPanel" PreviewMouseLeftButtonUp="ChatHistoryPanel_PreviewMouseLeftButtonUp">
                             <Border Background="#F2F4F7" CornerRadius="8" Padding="12">
-                                <TextBlock Text="이미지를 선택하면 편집 대화가 시작됩니다."
-                                           Foreground="#69717E"
-                                           TextWrapping="Wrap" />
+                                <TextBlock Text="이미지를 선택하면 편집 대화가 시작됩니다." Foreground="#69717E" TextWrapping="Wrap" />
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
 
-                    <Border Grid.Row="2"
-                            Background="#FAFBFC"
-                            BorderBrush="#E1E6ED"
-                            BorderThickness="0,1,0,0"
-                            Padding="10">
+                    <Border Grid.Row="2" Background="#FAFBFC" BorderBrush="#E1E6ED" BorderThickness="0,1,0,0" Padding="10">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -396,35 +260,11 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock x:Name="OperationStatusTextBlock"
-                                       Text="준비됨"
-                                       Foreground="#69717E"
-                                       FontSize="11"
-                                       TextWrapping="Wrap"
-                                       Margin="2,0,2,6" />
+                            <TextBlock x:Name="OperationStatusTextBlock" Text="준비됨" Foreground="#69717E" FontSize="11" TextWrapping="Wrap" Margin="2,0,2,6" />
+                            <ProgressBar x:Name="OperationProgressBar" Grid.Row="1" Height="5" Margin="0,0,0,8" IsIndeterminate="True" Visibility="Collapsed" />
 
-                            <ProgressBar x:Name="OperationProgressBar"
-                                         Grid.Row="1"
-                                         Height="5"
-                                         Margin="0,0,0,8"
-                                         IsIndeterminate="True"
-                                         Visibility="Collapsed" />
-
-                            <Border Grid.Row="2"
-                                    Background="White"
-                                    BorderBrush="#D7DEE8"
-                                    BorderThickness="1"
-                                    CornerRadius="8">
-                                <TextBox x:Name="PromptTextBox"
-                                         MinHeight="92"
-                                         MaxHeight="180"
-                                         AcceptsReturn="True"
-                                         TextWrapping="Wrap"
-                                         VerticalScrollBarVisibility="Auto"
-                                         Padding="10"
-                                         Background="Transparent"
-                                         BorderThickness="0"
-                                         ToolTip="한글 자연어로 이미지 수정 내용을 입력하세요." />
+                            <Border Grid.Row="2" Background="White" BorderBrush="#D7DEE8" BorderThickness="1" CornerRadius="8">
+                                <TextBox x:Name="PromptTextBox" MinHeight="92" MaxHeight="180" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Padding="10" Background="Transparent" BorderThickness="0" ToolTip="한글 자연어로 이미지 수정 내용을 입력하세요." />
                             </Border>
 
                             <Grid Grid.Row="3" Margin="0,9,0,0">
@@ -432,23 +272,8 @@
                                     <ColumnDefinition Width="*" MinWidth="120" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-
-                                <ComboBox x:Name="RequestModelComboBox"
-                                          Grid.Column="0"
-                                          Margin="0,0,8,0"
-                                          MinHeight="38"
-                                          VerticalContentAlignment="Center"
-                                          DisplayMemberPath="DisplayName"
-                                          SelectedValuePath="ModelId"
-                                          IsEnabled="{Binding IsEnabled, ElementName=EditImageButton}"
-                                          ToolTip="이번 이미지 수정에 사용할 모델을 선택합니다. 설정의 기본 모델은 시작값으로 사용됩니다." />
-
-                                <Button x:Name="EditImageButton"
-                                        Grid.Column="1"
-                                        Content="이미지 수정"
-                                        Style="{StaticResource PrimaryButtonStyle}"
-                                        Margin="0"
-                                        Click="EditImageWithModelButton_Click" />
+                                <ComboBox x:Name="RequestModelComboBox" Grid.Column="0" Margin="0,0,8,0" MinHeight="38" VerticalContentAlignment="Center" DisplayMemberPath="DisplayName" SelectedValuePath="ModelId" IsEnabled="{Binding IsEnabled, ElementName=EditImageButton}" ToolTip="이번 이미지 수정에 사용할 모델을 선택합니다. 설정의 기본 모델은 시작값으로 사용됩니다." />
+                                <Button x:Name="EditImageButton" Grid.Column="1" Content="이미지 수정" Style="{StaticResource PrimaryButtonStyle}" Margin="0" Click="EditImageWithModelButton_Click" />
                             </Grid>
                         </Grid>
                     </Border>
