@@ -13,4 +13,5 @@ public sealed record EditRecord(
     double? SelectionHeight,
     string InputImagePath,
     string OutputImagePath,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    double? ActualCostUsd = null);
