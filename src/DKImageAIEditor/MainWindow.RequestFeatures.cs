@@ -155,6 +155,7 @@ public partial class MainWindow
                 Margin = new Thickness(0, 0, 6, 0),
                 ToolTip = "다시 시도에 사용할 모델"
             };
+            selector.SelectionChanged += RetryModelSelector_SelectionChanged;
 
             var outerGrid = new Grid
             {
@@ -201,6 +202,11 @@ public partial class MainWindow
         }
 
         ApplyConversationDeleteButtonStyle(secondaryButtonStyle);
+    }
+
+    private static void RetryModelSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        e.Handled = true;
     }
 
     private void ApplyConversationDeleteButtonStyle(Style? secondaryButtonStyle)
@@ -315,6 +321,11 @@ public partial class MainWindow
             return;
         }
 
+        if (FindAncestor<ComboBox>(source) is not null || FindAncestor<ComboBoxItem>(source) is not null)
+        {
+            return;
+        }
+
         var textBlock = FindAncestor<TextBlock>(source);
         if (textBlock is null || string.IsNullOrWhiteSpace(textBlock.Text))
         {
@@ -326,9 +337,16 @@ public partial class MainWindow
             return;
         }
 
-        Clipboard.SetText(textBlock.Text);
-        OperationStatusTextBlock.Text = "대화 텍스트를 클립보드에 복사했습니다.";
-        e.Handled = true;
+        try
+        {
+            Clipboard.SetText(textBlock.Text);
+            OperationStatusTextBlock.Text = "대화 텍스트를 클립보드에 복사했습니다.";
+            e.Handled = true;
+        }
+        catch
+        {
+            OperationStatusTextBlock.Text = "클립보드 복사에 실패했습니다.";
+        }
     }
 
     private static IEnumerable<T> FindDescendants<T>(DependencyObject root)
