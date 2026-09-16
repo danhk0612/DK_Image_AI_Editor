@@ -20,7 +20,9 @@ public partial class SettingsWindow : Window
         PresetModelComboBox.ItemsSource = OpenRouterModelPreset.All;
         _settings = _settingsService.Load();
 
-        ApiKeyPasswordBox.Password = CredentialStore.LoadApiKey();
+        var apiKey = CredentialStore.LoadApiKey();
+        ApiKeyPasswordBox.Password = apiKey;
+        ApiKeyTextBox.Text = apiKey;
         PresetModelComboBox.SelectedValue = _settings.SelectedModelId;
         CustomModelTextBox.Text = _settings.CustomModelId;
         CustomStoragePathTextBox.Text = _settings.CustomImageStoragePath;
@@ -54,6 +56,27 @@ public partial class SettingsWindow : Window
 
         UpdateModelControls();
         UpdateStorageControls();
+    }
+
+    private void ToggleApiKeyVisibilityButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ApiKeyTextBox.Visibility == Visibility.Visible)
+        {
+            ApiKeyPasswordBox.Password = ApiKeyTextBox.Text;
+            ApiKeyTextBox.Visibility = Visibility.Collapsed;
+            ApiKeyPasswordBox.Visibility = Visibility.Visible;
+            ToggleApiKeyVisibilityButton.ToolTip = "API Key 표시";
+            ApiKeyPasswordBox.Focus();
+            ApiKeyPasswordBox.SelectAll();
+            return;
+        }
+
+        ApiKeyTextBox.Text = ApiKeyPasswordBox.Password;
+        ApiKeyPasswordBox.Visibility = Visibility.Collapsed;
+        ApiKeyTextBox.Visibility = Visibility.Visible;
+        ToggleApiKeyVisibilityButton.ToolTip = "API Key 숨김";
+        ApiKeyTextBox.Focus();
+        ApiKeyTextBox.SelectAll();
     }
 
     private void ModelMode_Checked(object sender, RoutedEventArgs e)
@@ -156,7 +179,10 @@ public partial class SettingsWindow : Window
         _settings.ImageStorageMode = storageMode;
         _settings.CustomImageStoragePath = customStoragePath;
 
-        CredentialStore.SaveApiKey(ApiKeyPasswordBox.Password.Trim());
+        var apiKey = ApiKeyTextBox.Visibility == Visibility.Visible
+            ? ApiKeyTextBox.Text
+            : ApiKeyPasswordBox.Password;
+        CredentialStore.SaveApiKey(apiKey.Trim());
         _settingsService.Save(_settings);
 
         DialogResult = true;
