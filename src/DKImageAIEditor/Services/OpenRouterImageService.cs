@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -49,14 +50,7 @@ public sealed class OpenRouterImageService
         if (!isManagementKey)
         {
             return new OpenRouterKeyBalanceStatus(
-                false,
-                usage,
-                limit,
-                limitRemaining,
-                limitReset,
-                null,
-                null,
-                null);
+                false, usage, limit, limitRemaining, limitReset, null, null, null);
         }
 
         using var creditsRequest = new HttpRequestMessage(HttpMethod.Get, CreditsEndpoint);
@@ -82,14 +76,123 @@ public sealed class OpenRouterImageService
             : null;
 
         return new OpenRouterKeyBalanceStatus(
-            true,
-            usage,
-            limit,
-            limitRemaining,
-            limitReset,
-            creditBalance,
-            totalCredits,
-            totalUsage);
+            true, usage, limit, limitRemaining, limitReset, creditBalance, totalCredits, totalUsage);
+    }
+
+    public async Task<ImageCostEstimate> GetImageCostEstimateAsync(
+        string apiKey,
+        string modelId,
+        double inputMegapixels,
+        CancellationToken cancellationToken = default)
+    {
+        var endpointUri = new Uri($"https://openrouter.ai/api/v1/images/models/{modelId}/endpoints");
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpointUri);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return new ImageCostEstimate(null, null, false, true, "가격 정보 조회 불가");
+        }
+
+        using var document = JsonDocument.Parse(body);
+        if (!document.RootElement.TryGetProperty("endpoints", out var endpoints) ||
+            endpoints.ValueKind != JsonValueKind.Array || endpoints.GetArrayLength() == 0)
+        {
+            return new ImageCostEstimate(null, null, false, true, "가격 정보 없음");
+        }
+
+        var estimates = new List<double>();
+        var tokenBased = false;
+        var approximate = false;
+
+        foreach (var endpoint in endpoints.EnumerateArray())
+        {
+            if (!endpoint.TryGetProperty("pricing", out var pricing) || pricing.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            var endpointCost = 0.0;
+            var hasKnownCost = false;
+            var endpointUnknown = false;
+
+            foreach (var price in pricing.EnumerateArray())
+            {
+                var unit = TryGetString(price, "unit") ?? string.Empty;
+                var billable = TryGetString(price, "billable") ?? string.Empty;
+                var cost = TryGetDouble(price, "cost_usd");
+                if (!cost.HasValue)
+                {
+                    endpointUnknown = true;
+                    continue;
+                }
+
+                if (unit.Equals("image", StringComparison.OrdinalIgnoreCase))
+                {
+                    endpointCost += cost.Value;
+                    hasKnownCost = true;
+                }
+                else if (unit.Equals("megapixel", StringComparison.OrdinalIgnoreCase))
+                {
+                    endpointCost += cost.Value * Math.Max(inputMegapixels, 0.01);
+                    hasKnownCost = true;
+                    if (billable.Contains("output", StringComparison.OrdinalIgnoreCase))
+                    {
+                        approximate = true;
+                    }
+                }
+                else if (unit.Contains("token", StringComparison.OrdinalIgnoreCase))
+                {
+                    tokenBased = true;
+                    endpointUnknown = true;
+                }
+                else
+                {
+                    endpointUnknown = true;
+                }
+            }
+
+            if (hasKnownCost)
+            {
+                estimates.Add(endpointCost);
+                approximate |= endpointUnknown;
+            }
+            else if (endpointUnknown)
+            {
+                tokenBased = true;
+            }
+        }
+
+        if (estimates.Count == 0)
+        {
+            return tokenBased
+                ? new ImageCostEstimate(null, null, true, true, "토큰 기반 과금 · 완료 후 실제 비용 표시")
+                : new ImageCostEstimate(null, null, false, true, "예상 비용 계산 불가 · 완료 후 실제 비용 표시");
+        }
+
+        var min = estimates.Min();
+        var max = estimates.Max();
+        string display;
+        if (Math.Abs(max - min) < 0.0000001)
+        {
+            display = $"{(approximate ? "예상 약" : "예상")} ${min:F4}";
+        }
+        else
+        {
+            display = $"{(approximate ? "예상 약" : "예상")} ${min:F4}~${max:F4}";
+        }
+
+        if (tokenBased)
+        {
+            display += " + 토큰 비용 가능";
+        }
+
+        return new ImageCostEstimate(min, max, tokenBased, approximate, display);
     }
 
     public async Task<ImageEditResult> EditImageAsync(
@@ -111,10 +214,7 @@ public sealed class OpenRouterImageService
                 new
                 {
                     type = "image_url",
-                    image_url = new
-                    {
-                        url = sourceDataUrl
-                    }
+                    image_url = new { url = sourceDataUrl }
                 }
             }
         };
@@ -139,10 +239,7 @@ public sealed class OpenRouterImageService
             throw new OpenRouterImageException(
                 response.StatusCode,
                 "OpenRouter 응답에 이미지가 없습니다.",
-                null,
-                null,
-                null,
-                responseBody);
+                null, null, null, responseBody);
         }
 
         var image = data[0];
@@ -155,17 +252,17 @@ public sealed class OpenRouterImageService
             throw new OpenRouterImageException(
                 response.StatusCode,
                 "OpenRouter 이미지 데이터가 비어 있습니다.",
-                null,
-                null,
-                null,
-                responseBody);
+                null, null, null, responseBody);
         }
 
         var mediaType = image.TryGetProperty("media_type", out var mediaTypeElement)
             ? mediaTypeElement.GetString() ?? "image/png"
             : "image/png";
+        var actualCostUsd = document.RootElement.TryGetProperty("usage", out var usage)
+            ? TryGetDouble(usage, "cost")
+            : null;
 
-        return new ImageEditResult(Convert.FromBase64String(base64), mediaType);
+        return new ImageEditResult(Convert.FromBase64String(base64), mediaType, actualCostUsd);
     }
 
     private static double? TryGetDouble(JsonElement element, string propertyName)
@@ -175,9 +272,18 @@ public sealed class OpenRouterImageService
             return null;
         }
 
-        return property.ValueKind == JsonValueKind.Number && property.TryGetDouble(out var value)
-            ? value
-            : null;
+        if (property.ValueKind == JsonValueKind.Number && property.TryGetDouble(out var numericValue))
+        {
+            return numericValue;
+        }
+
+        if (property.ValueKind == JsonValueKind.String &&
+            double.TryParse(property.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var stringValue))
+        {
+            return stringValue;
+        }
+
+        return null;
     }
 
     private static bool? TryGetBoolean(JsonElement element, string propertyName)
@@ -240,23 +346,17 @@ public sealed class OpenRouterImageService
         }
         catch (JsonException)
         {
-            // 구조화되지 않은 응답은 RawResponse로 보존한다.
         }
 
         return new OpenRouterImageException(
-            statusCode,
-            providerMessage,
-            providerName,
-            finishReason,
-            blockReason,
-            responseBody);
+            statusCode, providerMessage, providerName, finishReason, blockReason, responseBody);
     }
 
     private static ImageEditResult NormalizeSourceImage(byte[] imageBytes, string mediaType)
     {
         if (!mediaType.Equals("image/bmp", StringComparison.OrdinalIgnoreCase))
         {
-            return new ImageEditResult(imageBytes, mediaType);
+            return new ImageEditResult(imageBytes, mediaType, null);
         }
 
         using var sourceStream = new MemoryStream(imageBytes);
@@ -269,11 +369,18 @@ public sealed class OpenRouterImageService
 
         using var outputStream = new MemoryStream();
         encoder.Save(outputStream);
-        return new ImageEditResult(outputStream.ToArray(), "image/png");
+        return new ImageEditResult(outputStream.ToArray(), "image/png", null);
     }
 }
 
-public sealed record ImageEditResult(byte[] ImageBytes, string MediaType);
+public sealed record ImageEditResult(byte[] ImageBytes, string MediaType, double? ActualCostUsd);
+
+public sealed record ImageCostEstimate(
+    double? MinCostUsd,
+    double? MaxCostUsd,
+    bool HasTokenBasedComponent,
+    bool IsApproximate,
+    string DisplayText);
 
 public sealed record OpenRouterKeyBalanceStatus(
     bool IsManagementKey,
@@ -337,30 +444,22 @@ public sealed class OpenRouterImageException : Exception
 
         if (statusCode == HttpStatusCode.Unauthorized || statusCode == HttpStatusCode.Forbidden)
         {
-            return
-                "OpenRouter 인증에 실패했습니다.\n\n" +
-                "설정 창의 API Key가 올바른지 확인하세요.";
+            return "OpenRouter 인증에 실패했습니다.\n\n설정 창의 API Key가 올바른지 확인하세요.";
         }
 
         if ((int)statusCode == 402)
         {
-            return
-                "OpenRouter 크레딧 또는 결제 상태 때문에 요청을 처리할 수 없습니다.\n\n" +
-                "OpenRouter 계정의 사용 가능 크레딧을 확인하세요.";
+            return "OpenRouter 크레딧 또는 결제 상태 때문에 요청을 처리할 수 없습니다.\n\nOpenRouter 계정의 사용 가능 크레딧을 확인하세요.";
         }
 
         if ((int)statusCode == 429)
         {
-            return
-                "요청 한도에 도달했거나 모델 공급자가 일시적으로 요청을 제한했습니다.\n\n" +
-                "잠시 후 다시 시도하거나 다른 모델을 선택하세요.";
+            return "요청 한도에 도달했거나 모델 공급자가 일시적으로 요청을 제한했습니다.\n\n잠시 후 다시 시도하거나 다른 모델을 선택하세요.";
         }
 
         if ((int)statusCode >= 500)
         {
-            return
-                "OpenRouter 또는 모델 공급자에서 일시적인 서버 오류가 발생했습니다.\n\n" +
-                "잠시 후 다시 시도하세요.";
+            return "OpenRouter 또는 모델 공급자에서 일시적인 서버 오류가 발생했습니다.\n\n잠시 후 다시 시도하세요.";
         }
 
         var detail = string.IsNullOrWhiteSpace(providerMessage)
