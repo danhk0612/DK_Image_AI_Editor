@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DKImageAIEditor.Models;
 
 namespace DKImageAIEditor;
@@ -10,24 +11,50 @@ namespace DKImageAIEditor;
 public partial class MainWindow
 {
     private sealed record RetryEditContext(EditRecord Edit, ComboBox ModelSelector);
+    private TextBlock? _requestCostTextBlock;
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        EnsureRequestCostDisplay();
         RefreshRequestModelSelector();
-        EnhanceRetryModelSelectors();
-        ConversationList.SelectionChanged += ConversationList_RetryModelSelectorSelectionChanged;
     }
 
     private void SettingsButtonWithRefresh_Click(object sender, RoutedEventArgs e)
     {
         SettingsButton_Click(sender, e);
         RefreshRequestModelSelector();
-        EnhanceRetryModelSelectors();
     }
 
-    private void ConversationList_RetryModelSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void EnsureRequestCostDisplay()
     {
-        EnhanceRetryModelSelectors();
+        if (_requestCostTextBlock is not null || RequestModelComboBox.Parent is not Grid modelGrid)
+        {
+            return;
+        }
+
+        if (modelGrid.RowDefinitions.Count == 0)
+        {
+            modelGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            modelGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
+        Grid.SetRow(RequestModelComboBox, 0);
+        Grid.SetRow(EditImageButton, 0);
+
+        _requestCostTextBlock = new TextBlock
+        {
+            Text = "예상 비용: 모델을 선택하세요.",
+            Foreground = new SolidColorBrush(Color.FromRgb(105, 113, 126)),
+            FontSize = 11,
+            Margin = new Thickness(2, 5, 2, 0),
+            TextWrapping = TextWrapping.Wrap
+        };
+        Grid.SetRow(_requestCostTextBlock, 1);
+        Grid.SetColumn(_requestCostTextBlock, 0);
+        Grid.SetColumnSpan(_requestCostTextBlock, 2);
+        modelGrid.Children.Add(_requestCostTextBlock);
+
+        RequestModelComboBox.SelectionChanged += RequestModelComboBox_SelectionChanged;
     }
 
     private void RefreshRequestModelSelector()
@@ -48,12 +75,73 @@ public partial class MainWindow
         if (settings.UseCustomModel && customOption is not null)
         {
             RequestModelComboBox.SelectedItem = customOption;
+        }
+        else
+        {
+            RequestModelComboBox.SelectedItem = options.FirstOrDefault(option =>
+                string.Equals(option.ModelId, settings.SelectedModelId, StringComparison.OrdinalIgnoreCase))
+                ?? options.FirstOrDefault();
+        }
+
+        _ = UpdateRequestCostAsync();
+    }
+
+    private async void RequestModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        await UpdateRequestCostAsync();
+    }
+
+    private async Task UpdateRequestCostAsync()
+    {
+        if (_requestCostTextBlock is null ||
+            RequestModelComboBox.SelectedItem is not OpenRouterModelPreset selected)
+        {
             return;
         }
 
-        RequestModelComboBox.SelectedItem = options.FirstOrDefault(option =>
-            string.Equals(option.ModelId, settings.SelectedModelId, StringComparison.OrdinalIgnoreCase))
-            ?? options.FirstOrDefault();
+        await UpdateCostTextAsync(_requestCostTextBlock, selected.ModelId, _currentImagePath);
+    }
+
+    private async Task UpdateCostTextAsync(TextBlock target, string modelId, string? imagePath)
+    {
+        target.Text = "예상 비용: 조회 중...";
+        try
+        {
+            var apiKey = CredentialStore.LoadApiKey();
+            var megapixels = GetImageMegapixels(imagePath);
+            var estimate = await _openRouterImageService.GetImageCostEstimateAsync(
+                apiKey ?? string.Empty,
+                modelId,
+                megapixels);
+            target.Text = $"예상 비용: {estimate.DisplayText}";
+        }
+        catch
+        {
+            target.Text = "예상 비용: 조회 불가 · 완료 후 실제 비용 표시";
+        }
+    }
+
+    private static double GetImageMegapixels(string? imagePath)
+    {
+        if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+        {
+            return 1.0;
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(imagePath);
+            var decoder = BitmapDecoder.Create(
+                stream,
+                BitmapCreateOptions.DelayCreation,
+                BitmapCacheOption.None);
+            var frame = decoder.Frames[0];
+            return Math.Max(0.01, frame.PixelWidth * frame.PixelHeight / 1_000_000.0);
+        }
+        catch
+        {
+            return 1.0;
+        }
     }
 
     private async void EditImageWithModelButton_Click(object sender, RoutedEventArgs e)
@@ -62,36 +150,21 @@ public partial class MainWindow
         {
             if (!_isBusy)
             {
-                MessageBox.Show(
-                    this,
-                    "먼저 편집할 이미지 대화를 선택하세요.",
-                    "이미지 편집",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                MessageBox.Show(this, "먼저 편집할 이미지 대화를 선택하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             return;
         }
 
         if (_editMode != ImageEditMode.Full && _selectionPixelRect is null)
         {
-            MessageBox.Show(
-                this,
-                "이미지에서 수정할 영역을 마우스로 드래그해 선택하세요.",
-                "영역 선택 필요",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            MessageBox.Show(this, "이미지에서 수정할 영역을 마우스로 드래그해 선택하세요.", "영역 선택 필요", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         var prompt = NormalizePrompt(PromptTextBox.Text);
         if (prompt.Length == 0)
         {
-            MessageBox.Show(
-                this,
-                "수정 요청을 입력하세요.",
-                "이미지 편집",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            MessageBox.Show(this, "수정 요청을 입력하세요.", "이미지 편집", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -108,129 +181,6 @@ public partial class MainWindow
             _selectionPixelRect);
     }
 
-    private void EnhanceRetryModelSelectors()
-    {
-        var secondaryButtonStyle = Application.Current.TryFindResource("SecondaryButtonStyle") as Style;
-
-        foreach (var retryButton in FindDescendants<Button>(ChatHistoryPanel)
-                     .Where(button =>
-                         string.Equals(button.Content?.ToString(), "다시 시도", StringComparison.Ordinal) &&
-                         button.Tag is EditRecord)
-                     .ToList())
-        {
-            if (retryButton.Tag is not EditRecord edit ||
-                retryButton.Parent is not Panel currentRow ||
-                currentRow.Parent is not Panel parentPanel)
-            {
-                continue;
-            }
-
-            var continueButton = currentRow.Children
-                .OfType<Button>()
-                .FirstOrDefault(button => string.Equals(
-                    button.Content?.ToString(),
-                    "이 이미지에서 계속",
-                    StringComparison.Ordinal));
-
-            if (continueButton is null)
-            {
-                continue;
-            }
-
-            if (secondaryButtonStyle is not null)
-            {
-                continueButton.Style = secondaryButtonStyle;
-                retryButton.Style = secondaryButtonStyle;
-            }
-
-            var options = BuildRetryModelOptions(edit.ModelId, out var selectedOption);
-            var selector = new ComboBox
-            {
-                ItemsSource = options,
-                DisplayMemberPath = nameof(OpenRouterModelPreset.DisplayName),
-                SelectedItem = selectedOption,
-                MinHeight = 30,
-                MinWidth = 0,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                Margin = new Thickness(0, 0, 6, 0),
-                ToolTip = "다시 시도에 사용할 모델"
-            };
-            selector.SelectionChanged += RetryModelSelector_SelectionChanged;
-
-            var outerGrid = new Grid
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                Margin = currentRow.Margin
-            };
-            outerGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            outerGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            currentRow.Children.Remove(continueButton);
-            currentRow.Children.Remove(retryButton);
-
-            continueButton.HorizontalAlignment = HorizontalAlignment.Stretch;
-            continueButton.Margin = new Thickness(0, 0, 0, 6);
-            continueButton.MinWidth = 0;
-            continueButton.Padding = new Thickness(8, 5, 8, 5);
-            Grid.SetRow(continueButton, 0);
-            outerGrid.Children.Add(continueButton);
-
-            var retryRow = new Grid();
-            retryRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            retryRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            Grid.SetColumn(selector, 0);
-            retryRow.Children.Add(selector);
-
-            retryButton.HorizontalAlignment = HorizontalAlignment.Right;
-            retryButton.MinWidth = 76;
-            retryButton.Margin = new Thickness(0);
-            retryButton.Padding = new Thickness(8, 5, 8, 5);
-            Grid.SetColumn(retryButton, 1);
-            retryRow.Children.Add(retryButton);
-
-            Grid.SetRow(retryRow, 1);
-            outerGrid.Children.Add(retryRow);
-
-            var rowIndex = parentPanel.Children.IndexOf(currentRow);
-            parentPanel.Children.RemoveAt(rowIndex);
-            parentPanel.Children.Insert(rowIndex, outerGrid);
-
-            retryButton.Click -= RetryEditButton_Click;
-            retryButton.Click += RetryEditWithModelButton_Click;
-            retryButton.Tag = new RetryEditContext(edit, selector);
-        }
-
-        ApplyConversationDeleteButtonStyle(secondaryButtonStyle);
-    }
-
-    private static void RetryModelSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        e.Handled = true;
-    }
-
-    private void ApplyConversationDeleteButtonStyle(Style? secondaryButtonStyle)
-    {
-        if (secondaryButtonStyle is null)
-        {
-            return;
-        }
-
-        foreach (var item in ConversationList.Items.OfType<ListBoxItem>())
-        {
-            if (item.Content is not DependencyObject content)
-            {
-                continue;
-            }
-
-            foreach (var button in FindDescendants<Button>(content)
-                         .Where(button => string.Equals(button.Content?.ToString(), "삭제", StringComparison.Ordinal)))
-            {
-                button.Style = secondaryButtonStyle;
-            }
-        }
-    }
-
     private IReadOnlyList<OpenRouterModelPreset> BuildRetryModelOptions(
         string originalModelId,
         out OpenRouterModelPreset selectedOption)
@@ -244,8 +194,7 @@ public partial class MainWindow
         var selected = options.FirstOrDefault(option =>
             string.Equals(option.ModelId, originalModelId, StringComparison.OrdinalIgnoreCase));
 
-        if (selected is null &&
-            !string.Equals(originalModelId, customModelId, StringComparison.OrdinalIgnoreCase))
+        if (selected is null && !string.Equals(originalModelId, customModelId, StringComparison.OrdinalIgnoreCase))
         {
             selected = new OpenRouterModelPreset($"작업 모델 · {originalModelId}", originalModelId);
             options.Add(selected);
@@ -258,8 +207,7 @@ public partial class MainWindow
             options.Add(customOption);
         }
 
-        if (string.Equals(originalModelId, customModelId, StringComparison.OrdinalIgnoreCase) &&
-            customOption is not null)
+        if (string.Equals(originalModelId, customModelId, StringComparison.OrdinalIgnoreCase) && customOption is not null)
         {
             selected = customOption;
         }
@@ -268,10 +216,19 @@ public partial class MainWindow
         return options;
     }
 
+    private async void RetryModelSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is ComboBox { Tag: TextBlock costText, SelectedItem: OpenRouterModelPreset selected } selector &&
+            selector.DataContext is EditRecord edit)
+        {
+            await UpdateCostTextAsync(costText, selected.ModelId, edit.InputImagePath);
+        }
+    }
+
     private async void RetryEditWithModelButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isBusy || _currentConversation is null ||
-            sender is not Button { Tag: RetryEditContext context })
+        if (_isBusy || _currentConversation is null || sender is not Button { Tag: RetryEditContext context })
         {
             return;
         }
@@ -279,12 +236,7 @@ public partial class MainWindow
         var edit = context.Edit;
         if (!File.Exists(edit.InputImagePath))
         {
-            MessageBox.Show(
-                this,
-                "이 작업에 사용된 입력 이미지를 찾을 수 없습니다.",
-                "다시 시도",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            MessageBox.Show(this, "이 작업에 사용된 입력 이미지를 찾을 수 없습니다.", "다시 시도", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -316,23 +268,15 @@ public partial class MainWindow
 
     private void ChatHistoryPanel_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is not DependencyObject source)
-        {
-            return;
-        }
-
-        if (FindAncestor<ComboBox>(source) is not null || FindAncestor<ComboBoxItem>(source) is not null)
+        if (e.OriginalSource is not DependencyObject source ||
+            FindAncestor<ComboBox>(source) is not null ||
+            FindAncestor<ComboBoxItem>(source) is not null)
         {
             return;
         }
 
         var textBlock = FindAncestor<TextBlock>(source);
-        if (textBlock is null || string.IsNullOrWhiteSpace(textBlock.Text))
-        {
-            return;
-        }
-
-        if (FindAncestor<Button>(textBlock) is not null)
+        if (textBlock is null || string.IsNullOrWhiteSpace(textBlock.Text) || FindAncestor<Button>(textBlock) is not null)
         {
             return;
         }
@@ -345,26 +289,7 @@ public partial class MainWindow
         }
         catch
         {
-            OperationStatusTextBlock.Text = "클립보드 복사에 실패했습니다.";
-        }
-    }
-
-    private static IEnumerable<T> FindDescendants<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        var childCount = VisualTreeHelper.GetChildrenCount(root);
-        for (var index = 0; index < childCount; index++)
-        {
-            var child = VisualTreeHelper.GetChild(root, index);
-            if (child is T match)
-            {
-                yield return match;
-            }
-
-            foreach (var descendant in FindDescendants<T>(child))
-            {
-                yield return descendant;
-            }
+            OperationStatusTextBlock.Text = "클립보드에 복사하지 못했습니다.";
         }
     }
 
