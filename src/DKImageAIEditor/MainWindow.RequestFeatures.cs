@@ -12,11 +12,18 @@ namespace DKImageAIEditor;
 public partial class MainWindow
 {
     private sealed record RetryEditContext(EditRecord Edit, ComboBox ModelSelector);
+    private readonly ImageCostEstimatorService _imageCostEstimatorService = new();
     private TextBlock? _requestCostTextBlock;
+    private CancellationTokenSource? _requestCostDebounceCts;
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         EnsureRequestCostDisplay();
+        PromptTextBox.TextChanged += PromptTextBox_CostTextChanged;
+        FullEditModeButton.Click += EditModeVisualRefresh_Click;
+        RegionEditModeButton.Click += EditModeVisualRefresh_Click;
+        CropEditModeButton.Click += EditModeVisualRefresh_Click;
+        UpdateEditModeButtonVisuals();
         RefreshRequestModelSelector();
     }
 
@@ -84,15 +91,44 @@ public partial class MainWindow
                 ?? options.FirstOrDefault();
         }
 
-        _ = UpdateRequestCostAsync();
+        ScheduleRequestCostUpdate(0);
     }
 
-    private async void RequestModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void RequestModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        await UpdateRequestCostAsync();
+        ScheduleRequestCostUpdate(0);
     }
 
-    private async Task UpdateRequestCostAsync()
+    private void PromptTextBox_CostTextChanged(object sender, TextChangedEventArgs e)
+    {
+        ScheduleRequestCostUpdate(300);
+    }
+
+    private void ScheduleRequestCostUpdate(int delayMilliseconds)
+    {
+        _requestCostDebounceCts?.Cancel();
+        _requestCostDebounceCts?.Dispose();
+        _requestCostDebounceCts = new CancellationTokenSource();
+        _ = UpdateRequestCostDelayedAsync(delayMilliseconds, _requestCostDebounceCts.Token);
+    }
+
+    private async Task UpdateRequestCostDelayedAsync(int delayMilliseconds, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (delayMilliseconds > 0)
+            {
+                await Task.Delay(delayMilliseconds, cancellationToken);
+            }
+
+            await UpdateRequestCostAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task UpdateRequestCostAsync(CancellationToken cancellationToken = default)
     {
         if (_requestCostTextBlock is null ||
             RequestModelComboBox.SelectedItem is not OpenRouterModelPreset selected)
@@ -100,21 +136,36 @@ public partial class MainWindow
             return;
         }
 
-        await UpdateCostTextAsync(_requestCostTextBlock, selected.ModelId, _currentImagePath);
+        await UpdateCostTextAsync(
+            _requestCostTextBlock,
+            selected.ModelId,
+            _currentImagePath,
+            PromptTextBox.Text,
+            cancellationToken);
     }
 
-    private async Task UpdateCostTextAsync(TextBlock target, string modelId, string? imagePath)
+    private async Task UpdateCostTextAsync(
+        TextBlock target,
+        string modelId,
+        string? imagePath,
+        string? prompt,
+        CancellationToken cancellationToken = default)
     {
-        target.Text = "예상 비용: 조회 중...";
+        target.Text = "예상 비용: 계산 중...";
         try
         {
             var apiKey = CredentialStore.LoadApiKey();
             var megapixels = GetImageMegapixels(imagePath);
-            var estimate = await _openRouterImageService.GetImageCostEstimateAsync(
+            var estimate = await _imageCostEstimatorService.EstimateAsync(
                 apiKey ?? string.Empty,
                 modelId,
-                megapixels);
+                megapixels,
+                prompt,
+                cancellationToken);
             target.Text = $"예상 비용: {estimate.DisplayText}";
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch
         {
@@ -143,6 +194,32 @@ public partial class MainWindow
         {
             return 1.0;
         }
+    }
+
+    private void EditModeVisualRefresh_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateEditModeButtonVisuals();
+    }
+
+    private void UpdateEditModeButtonVisuals()
+    {
+        ApplyEditModeButtonVisual(FullEditModeButton, _editMode == ImageEditMode.Full);
+        ApplyEditModeButtonVisual(RegionEditModeButton, _editMode == ImageEditMode.Region);
+        ApplyEditModeButtonVisual(CropEditModeButton, _editMode == ImageEditMode.Crop);
+    }
+
+    private static void ApplyEditModeButtonVisual(Button button, bool isSelected)
+    {
+        button.Background = new SolidColorBrush(isSelected
+            ? Color.FromRgb(53, 46, 89)
+            : Colors.White);
+        button.Foreground = new SolidColorBrush(isSelected
+            ? Colors.White
+            : Color.FromRgb(38, 50, 68));
+        button.BorderBrush = new SolidColorBrush(isSelected
+            ? Color.FromRgb(53, 46, 89)
+            : Color.FromRgb(215, 222, 232));
+        button.FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal;
     }
 
     private async void EditImageWithModelButton_Click(object sender, RoutedEventArgs e)
@@ -223,7 +300,11 @@ public partial class MainWindow
         if (sender is ComboBox { Tag: TextBlock costText, SelectedItem: OpenRouterModelPreset selected } selector &&
             selector.DataContext is EditRecord edit)
         {
-            await UpdateCostTextAsync(costText, selected.ModelId, edit.InputImagePath);
+            await UpdateCostTextAsync(
+                costText,
+                selected.ModelId,
+                edit.InputImagePath,
+                edit.Prompt);
         }
     }
 
