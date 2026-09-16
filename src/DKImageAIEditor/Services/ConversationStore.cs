@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Windows;
 using DKImageAIEditor.Models;
 using Microsoft.Data.Sqlite;
 
@@ -10,6 +11,7 @@ public sealed class ConversationStore
     private readonly string _dataRoot;
     private readonly string _conversationsRoot;
     private readonly string _databasePath;
+    private readonly AppSettingsService _settingsService = new();
 
     public ConversationStore()
     {
@@ -27,7 +29,8 @@ public sealed class ConversationStore
     public ConversationRecord CreateConversation(string sourceImagePath)
     {
         var id = Guid.NewGuid().ToString("N");
-        var conversationDirectory = Path.Combine(_conversationsRoot, id);
+        var settings = _settingsService.Load();
+        var conversationDirectory = GetConversationDirectory(sourceImagePath, id, settings);
         Directory.CreateDirectory(conversationDirectory);
 
         var extension = Path.GetExtension(sourceImagePath).ToLowerInvariant();
@@ -190,13 +193,32 @@ public sealed class ConversationStore
 
     public string GetVersionImagePath(string conversationId, int sequence, string extension = ".png")
     {
-        var conversationDirectory = Path.Combine(_conversationsRoot, conversationId);
+        var conversation = GetConversation(conversationId);
+        var conversationDirectory = conversation is null
+            ? Path.Combine(_conversationsRoot, conversationId)
+            : Path.GetDirectoryName(conversation.OriginalImagePath) ?? Path.Combine(_conversationsRoot, conversationId);
+
         Directory.CreateDirectory(conversationDirectory);
         return Path.Combine(conversationDirectory, $"{sequence:0000}{extension}");
     }
 
     public void DeleteConversation(string id)
     {
+        var conversation = GetConversation(id);
+        var conversationDirectory = conversation is null
+            ? Path.Combine(_conversationsRoot, id)
+            : Path.GetDirectoryName(conversation.OriginalImagePath);
+
+        var deleteImageFolder = false;
+        if (!string.IsNullOrWhiteSpace(conversationDirectory) && Directory.Exists(conversationDirectory))
+        {
+            deleteImageFolder = MessageBox.Show(
+                "이 대화의 이미지 저장 폴더도 함께 삭제할까요?\n\n아니오를 선택하면 대화 기록만 삭제되고 이미지 파일은 그대로 남습니다.",
+                "이미지 폴더 삭제",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question) == MessageBoxResult.Yes;
+        }
+
         using (var connection = OpenConnection())
         using (var command = connection.CreateCommand())
         {
@@ -205,11 +227,57 @@ public sealed class ConversationStore
             command.ExecuteNonQuery();
         }
 
-        var conversationDirectory = Path.Combine(_conversationsRoot, id);
-        if (Directory.Exists(conversationDirectory))
+        if (deleteImageFolder &&
+            !string.IsNullOrWhiteSpace(conversationDirectory) &&
+            Directory.Exists(conversationDirectory))
         {
-            Directory.Delete(conversationDirectory, true);
+            try
+            {
+                Directory.Delete(conversationDirectory, true);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    $"대화 기록은 삭제했지만 이미지 폴더를 삭제하지 못했습니다.\n\n{exception.Message}",
+                    "이미지 폴더 삭제 실패",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
+    }
+
+    private string GetConversationDirectory(string sourceImagePath, string id, AppSettings settings)
+    {
+        if (settings.ImageStorageMode == ImageStorageMode.AppData)
+        {
+            return Path.Combine(_conversationsRoot, id);
+        }
+
+        var root = settings.ImageStorageMode switch
+        {
+            ImageStorageMode.SourceFolder => Path.GetDirectoryName(sourceImagePath),
+            ImageStorageMode.CustomFolder => settings.CustomImageStoragePath,
+            _ => null
+        };
+
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            throw new InvalidOperationException("이미지 저장 위치를 확인할 수 없습니다. 설정에서 저장 위치를 다시 지정하세요.");
+        }
+
+        Directory.CreateDirectory(root);
+        var sourceName = SanitizeFolderName(Path.GetFileNameWithoutExtension(sourceImagePath));
+        var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var folderName = $"{sourceName}_{timestamp}_{id[..8]}";
+        return Path.Combine(root, folderName);
+    }
+
+    private static string SanitizeFolderName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = value.Select(character => invalid.Contains(character) ? '_' : character).ToArray();
+        var sanitized = new string(chars).Trim();
+        return string.IsNullOrWhiteSpace(sanitized) ? "image" : sanitized;
     }
 
     private void InitializeDatabase()
