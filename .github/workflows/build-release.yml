@@ -36,11 +36,13 @@ jobs:
         shell: pwsh
         run: .\publish.ps1
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: DK-Image-AI-Editor-v${{ steps.version.outputs.version }}-win-x64
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*-single.exe
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -53,4 +55,6 @@ jobs:
           prerelease: false
           make_latest: true
           generate_release_notes: true
-          files: dist/*.zip
+          files: |
+            dist/*.zip
+            dist/*-single.exe
