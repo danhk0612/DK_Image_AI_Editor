@@ -23,6 +23,10 @@ public partial class MainWindow
         FullEditModeButton.Click += EditModeVisualRefresh_Click;
         RegionEditModeButton.Click += EditModeVisualRefresh_Click;
         CropEditModeButton.Click += EditModeVisualRefresh_Click;
+        FullEditModeButton.IsEnabledChanged += EditModeButton_IsEnabledChanged;
+        RegionEditModeButton.IsEnabledChanged += EditModeButton_IsEnabledChanged;
+        CropEditModeButton.IsEnabledChanged += EditModeButton_IsEnabledChanged;
+        OperationProgressBar.IsVisibleChanged += OperationProgressBar_IsVisibleChanged;
         UpdateEditModeButtonVisuals();
         RefreshRequestModelSelector();
     }
@@ -198,6 +202,28 @@ public partial class MainWindow
 
     private void EditModeVisualRefresh_Click(object sender, RoutedEventArgs e)
     {
+        UpdateEditModeButtonVisuals();
+    }
+
+    private void EditModeButton_IsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_isBusy && sender is Button button && !button.IsEnabled)
+        {
+            button.IsEnabled = true;
+            button.IsHitTestVisible = false;
+            UpdateEditModeButtonVisuals();
+        }
+    }
+
+    private void OperationProgressBar_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        var canInteract = !_isBusy;
+        FullEditModeButton.IsEnabled = true;
+        RegionEditModeButton.IsEnabled = true;
+        CropEditModeButton.IsEnabled = true;
+        FullEditModeButton.IsHitTestVisible = canInteract;
+        RegionEditModeButton.IsHitTestVisible = canInteract;
+        CropEditModeButton.IsHitTestVisible = canInteract;
         UpdateEditModeButtonVisuals();
     }
 
