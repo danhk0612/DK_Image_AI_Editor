@@ -110,7 +110,7 @@ public sealed class ConversationStore
         command.CommandText = """
             SELECT Id, ConversationId, SequenceNumber, Prompt, ModelId, EditMode,
                    SelectionX, SelectionY, SelectionWidth, SelectionHeight,
-                   InputImagePath, OutputImagePath, CreatedAt
+                   InputImagePath, OutputImagePath, CreatedAt, ActualCostUsd
             FROM Edits
             WHERE ConversationId = $conversationId
             ORDER BY SequenceNumber ASC;
@@ -133,7 +133,8 @@ public sealed class ConversationStore
                 reader.IsDBNull(9) ? null : reader.GetDouble(9),
                 reader.GetString(10),
                 reader.GetString(11),
-                ParseDateTimeOffset(reader.GetString(12))));
+                ParseDateTimeOffset(reader.GetString(12)),
+                reader.IsDBNull(13) ? null : reader.GetDouble(13)));
         }
 
         return edits;
@@ -151,11 +152,11 @@ public sealed class ConversationStore
                 INSERT INTO Edits
                     (Id, ConversationId, SequenceNumber, Prompt, ModelId, EditMode,
                      SelectionX, SelectionY, SelectionWidth, SelectionHeight,
-                     InputImagePath, OutputImagePath, CreatedAt)
+                     InputImagePath, OutputImagePath, CreatedAt, ActualCostUsd)
                 VALUES
                     ($id, $conversationId, $sequenceNumber, $prompt, $modelId, $editMode,
                      $selectionX, $selectionY, $selectionWidth, $selectionHeight,
-                     $inputImagePath, $outputImagePath, $createdAt);
+                     $inputImagePath, $outputImagePath, $createdAt, $actualCostUsd);
                 """;
             insert.Parameters.AddWithValue("$id", edit.Id);
             insert.Parameters.AddWithValue("$conversationId", edit.ConversationId);
@@ -170,6 +171,7 @@ public sealed class ConversationStore
             insert.Parameters.AddWithValue("$inputImagePath", edit.InputImagePath);
             insert.Parameters.AddWithValue("$outputImagePath", edit.OutputImagePath);
             insert.Parameters.AddWithValue("$createdAt", edit.CreatedAt.ToString("O"));
+            insert.Parameters.AddWithValue("$actualCostUsd", (object?)edit.ActualCostUsd ?? DBNull.Value);
             insert.ExecuteNonQuery();
         }
 
@@ -308,6 +310,7 @@ public sealed class ConversationStore
                 InputImagePath TEXT NOT NULL,
                 OutputImagePath TEXT NOT NULL,
                 CreatedAt TEXT NOT NULL,
+                ActualCostUsd REAL NULL,
                 FOREIGN KEY (ConversationId) REFERENCES Conversations(Id) ON DELETE CASCADE,
                 UNIQUE (ConversationId, SequenceNumber)
             );
@@ -319,6 +322,27 @@ public sealed class ConversationStore
                 ON Edits(ConversationId, SequenceNumber);
             """;
         command.ExecuteNonQuery();
+
+        EnsureColumn(connection, "Edits", "ActualCostUsd", "REAL NULL");
+    }
+
+    private static void EnsureColumn(SqliteConnection connection, string tableName, string columnName, string declaration)
+    {
+        using var pragma = connection.CreateCommand();
+        pragma.CommandText = $"PRAGMA table_info({tableName});";
+        using var reader = pragma.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
+        reader.Close();
+        using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {declaration};";
+        alter.ExecuteNonQuery();
     }
 
     private SqliteConnection OpenConnection()
