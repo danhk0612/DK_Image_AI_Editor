@@ -7,9 +7,9 @@
     <Nullable>enable</Nullable>
     <AssemblyName>DKImageAIEditor</AssemblyName>
     <RootNamespace>DKImageAIEditor</RootNamespace>
-    <Version>1.0.2</Version>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <FileVersion>1.0.2.0</FileVersion>
+    <Version>1.0.3</Version>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.3.0</FileVersion>
     <Product>DK Image AI Editor</Product>
     <Authors>참빛바다</Authors>
     <Copyright>Copyright © 2026 참빛바다</Copyright>
