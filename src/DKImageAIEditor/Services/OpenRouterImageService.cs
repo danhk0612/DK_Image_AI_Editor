@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace DKImageAIEditor.Services;
@@ -203,8 +204,59 @@ public sealed class OpenRouterImageService
         string prompt,
         CancellationToken cancellationToken = default)
     {
-        var normalizedSource = NormalizeSourceImage(sourceImageBytes, sourceMediaType);
-        var sourceDataUrl = $"data:{normalizedSource.MediaType};base64,{Convert.ToBase64String(normalizedSource.ImageBytes)}";
+        if (!IsOpenAiImageModel(modelId))
+        {
+            var normalizedSource = NormalizeSourceImage(sourceImageBytes, sourceMediaType);
+            return await SendEditRequestAsync(
+                apiKey,
+                modelId,
+                normalizedSource,
+                prompt,
+                cancellationToken);
+        }
+
+        var variants = BuildOpenAiCompatibleVariants(sourceImageBytes);
+        OpenRouterImageException? lastInvalidImageException = null;
+
+        foreach (var variant in variants)
+        {
+            try
+            {
+                return await SendEditRequestAsync(
+                    apiKey,
+                    modelId,
+                    variant,
+                    prompt,
+                    cancellationToken);
+            }
+            catch (OpenRouterImageException exception) when (IsInvalidImageModeError(exception))
+            {
+                lastInvalidImageException = exception;
+            }
+        }
+
+        if (lastInvalidImageException is not null)
+        {
+            throw new OpenRouterImageException(
+                lastInvalidImageException.StatusCode,
+                $"{lastInvalidImageException.ProviderMessage}\n\nOpenAI 호환 입력으로 자동 재시도했습니다: 8-bit RGB JPEG → 8-bit RGB PNG.",
+                lastInvalidImageException.ProviderName,
+                lastInvalidImageException.FinishReason,
+                lastInvalidImageException.BlockReason,
+                lastInvalidImageException.RawResponse);
+        }
+
+        throw new InvalidOperationException("OpenAI 이미지 편집 요청을 처리하지 못했습니다.");
+    }
+
+    private async Task<ImageEditResult> SendEditRequestAsync(
+        string apiKey,
+        string modelId,
+        ImageEditSource source,
+        string prompt,
+        CancellationToken cancellationToken)
+    {
+        var sourceDataUrl = $"data:{source.MediaType};base64,{Convert.ToBase64String(source.ImageBytes)}";
         var payload = new
         {
             model = modelId,
@@ -263,6 +315,60 @@ public sealed class OpenRouterImageService
             : null;
 
         return new ImageEditResult(Convert.FromBase64String(base64), mediaType, actualCostUsd);
+    }
+
+    private static bool IsOpenAiImageModel(string modelId)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return false;
+        }
+
+        var value = modelId.Trim().ToLowerInvariant();
+        return value.StartsWith("openai/", StringComparison.Ordinal) ||
+               value.Contains("gpt-image", StringComparison.Ordinal) ||
+               value.Contains("gpt-5-image", StringComparison.Ordinal) ||
+               value.Contains("chatgpt-image", StringComparison.Ordinal);
+    }
+
+    private static bool IsInvalidImageModeError(OpenRouterImageException exception)
+    {
+        var message = exception.ProviderMessage ?? exception.RawResponse;
+        return message.Contains("Invalid image file or mode", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("invalid image", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<ImageEditSource> BuildOpenAiCompatibleVariants(byte[] imageBytes)
+    {
+        using var sourceStream = new MemoryStream(imageBytes);
+        var decoder = BitmapDecoder.Create(
+            sourceStream,
+            BitmapCreateOptions.PreservePixelFormat,
+            BitmapCacheOption.OnLoad);
+        var source = decoder.Frames[0];
+
+        var rgb = new FormatConvertedBitmap();
+        rgb.BeginInit();
+        rgb.Source = source;
+        rgb.DestinationFormat = PixelFormats.Bgr24;
+        rgb.EndInit();
+        rgb.Freeze();
+
+        var jpegEncoder = new JpegBitmapEncoder { QualityLevel = 95 };
+        jpegEncoder.Frames.Add(BitmapFrame.Create(rgb));
+        using var jpegStream = new MemoryStream();
+        jpegEncoder.Save(jpegStream);
+
+        var pngEncoder = new PngBitmapEncoder();
+        pngEncoder.Frames.Add(BitmapFrame.Create(rgb));
+        using var pngStream = new MemoryStream();
+        pngEncoder.Save(pngStream);
+
+        return new[]
+        {
+            new ImageEditSource(jpegStream.ToArray(), "image/jpeg"),
+            new ImageEditSource(pngStream.ToArray(), "image/png")
+        };
     }
 
     private static double? TryGetDouble(JsonElement element, string propertyName)
@@ -352,11 +458,11 @@ public sealed class OpenRouterImageService
             statusCode, providerMessage, providerName, finishReason, blockReason, responseBody);
     }
 
-    private static ImageEditResult NormalizeSourceImage(byte[] imageBytes, string mediaType)
+    private static ImageEditSource NormalizeSourceImage(byte[] imageBytes, string mediaType)
     {
         if (!mediaType.Equals("image/bmp", StringComparison.OrdinalIgnoreCase))
         {
-            return new ImageEditResult(imageBytes, mediaType, null);
+            return new ImageEditSource(imageBytes, mediaType);
         }
 
         using var sourceStream = new MemoryStream(imageBytes);
@@ -369,9 +475,11 @@ public sealed class OpenRouterImageService
 
         using var outputStream = new MemoryStream();
         encoder.Save(outputStream);
-        return new ImageEditResult(outputStream.ToArray(), "image/png", null);
+        return new ImageEditSource(outputStream.ToArray(), "image/png");
     }
 }
+
+public sealed record ImageEditSource(byte[] ImageBytes, string MediaType);
 
 public sealed record ImageEditResult(byte[] ImageBytes, string MediaType, double? ActualCostUsd);
 
