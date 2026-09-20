@@ -4,7 +4,7 @@
 
 ## T01 프로젝트 초기화
 
-- [x] .NET 8 WPF 솔루션/프로젝트
+- [x] .NET 10 WPF 솔루션/프로젝트
 - [x] `.gitignore`
 - [x] MIT License
 - [x] README 및 기본 문서
@@ -149,20 +149,18 @@
 
 ## T13 마무리 / 배포
 
-- [x] 버전 0.5.0 메타데이터 적용
-- [x] v1.0.0 정식 릴리스 배포
-- [x] v1.0.1 정식 릴리스 배포
-- [x] v1.0.2 메타데이터 적용
-- [x] Windows x64 self-contained multi-file 안정판 Publish
-- [x] Windows x64 self-contained single-file 편의/검증용 Publish
-- [x] 시작/런타임 치명 오류 로그 저장
-- [x] `publish.ps1` 안정판 ZIP + single EXE 동시 패키징
-- [x] GitHub Actions main 자동 Windows 빌드/패키징
+- [x] v1.0.x self-contained 배포 계열 완료
+- [x] .NET 10 LTS 전환
+- [x] Microsoft.Data.Sqlite 10.0.12 전환
+- [x] Windows x64 framework-dependent single-file 앱 Publish
+- [x] NativeAOT 런처 추가
+- [x] 런처에서 .NET 10 Desktop Runtime x64 설치 여부 확인
+- [x] 런타임 미설치 시 Microsoft 공식 다운로드 페이지 안내
+- [x] 설정 화면 GitHub Release 업데이트 확인
+- [x] 업데이트 ZIP 다운로드 및 외부 런처 기반 파일 교체/재실행
+- [x] `publish.ps1` 런처 + 앱 + README + LICENSE 단일 ZIP 패키징
+- [x] GitHub Actions PR 빌드 검증
 - [x] `release:` 커밋 또는 수동 실행 시 GitHub Release 자동 생성
-- [x] GitHub Actions에서 안정판 ZIP + single EXE 생성 검증
-- [-] v1.0.2 듀얼 패키지 정식 배포 진행
-- [ ] v1.0.2 안정판 실기기 실행 검증
-- [ ] v1.0.2 single EXE 실기기 실행 검증
-- [ ] 설정/API Key 저장 후 프로그램 재실행 검증
-- [ ] Custom 모델 테스트
-- [x] README 사용법 갱신
+- [-] v1.1.0 GitHub Actions 검증 및 정식 배포 진행
+- [ ] v1.1.0 실제 Windows에서 런타임 설치/미설치 양쪽 실행 검증
+- [ ] v1.1.0 앱 내 업데이트 실기기 검증

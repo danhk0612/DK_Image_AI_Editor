@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="설정"
         Width="640"
-        Height="700"
+        Height="760"
         MinHeight="620"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterOwner"
@@ -135,6 +135,24 @@
                                Margin="20,7,0,0"
                                Foreground="#7A8290"
                                FontSize="12" />
+
+                    <Separator Margin="0,22,0,18" />
+
+                    <TextBlock Text="프로그램 업데이트" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock x:Name="CurrentVersionTextBlock"
+                               Margin="0,6,0,8"
+                               Foreground="#596170" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="CheckUpdateButton"
+                                Content="업데이트 확인"
+                                Padding="14,7"
+                                Click="CheckUpdateButton_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="UpdateStatusTextBlock"
+                               Margin="0,8,0,0"
+                               Foreground="#7A8290"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
         </ScrollViewer>

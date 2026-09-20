@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -17,10 +20,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Read version
         id: version
@@ -36,17 +39,15 @@ jobs:
         shell: pwsh
         run: .\publish.ps1
 
-      - name: Upload build artifacts
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: DK-Image-AI-Editor-v${{ steps.version.outputs.version }}-win-x64
-          path: |
-            dist/*.zip
-            dist/*-single.exe
+          path: dist/*.zip
           if-no-files-found: error
 
       - name: Create GitHub Release
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release:')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release:'))
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
@@ -55,6 +56,4 @@ jobs:
           prerelease: false
           make_latest: true
           generate_release_notes: true
-          files: |
-            dist/*.zip
-            dist/*-single.exe
+          files: dist/*.zip

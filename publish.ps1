@@ -1,19 +1,20 @@
 $ErrorActionPreference = 'Stop'
 
-$Project = Join-Path $PSScriptRoot 'src\DKImageAIEditor\DKImageAIEditor.csproj'
-[xml]$ProjectXml = Get-Content $Project
+$AppProject = Join-Path $PSScriptRoot 'src\DKImageAIEditor\DKImageAIEditor.csproj'
+$LauncherProject = Join-Path $PSScriptRoot 'src\DKImageAIEditor.Launcher\DKImageAIEditor.Launcher.csproj'
+
+[xml]$ProjectXml = Get-Content $AppProject
 $Version = [string]($ProjectXml.Project.PropertyGroup.Version | Select-Object -First 1)
 if ([string]::IsNullOrWhiteSpace($Version)) {
     throw '프로젝트 Version 값을 찾을 수 없습니다.'
 }
 
-$PublishDir = Join-Path $PSScriptRoot 'src\DKImageAIEditor\bin\Release\net8.0-windows\win-x64\publish'
-$SinglePublishDir = Join-Path $PSScriptRoot 'src\DKImageAIEditor\bin\Release\net8.0-windows\win-x64\publish-single'
+$AppPublishDir = Join-Path $PSScriptRoot 'src\DKImageAIEditor\bin\Release\net10.0-windows\win-x64\publish-app'
+$LauncherPublishDir = Join-Path $PSScriptRoot 'src\DKImageAIEditor.Launcher\bin\Release\net10.0-windows\win-x64\publish'
 $DistDir = Join-Path $PSScriptRoot 'dist'
 $PackageName = "DK-Image-AI-Editor-v$Version-win-x64"
 $StageDir = Join-Path $DistDir $PackageName
 $ZipPath = Join-Path $DistDir "$PackageName.zip"
-$SingleExePath = Join-Path $DistDir "$PackageName-single.exe"
 
 function Assert-LastExitCode([string]$Step) {
     if ($LASTEXITCODE -ne 0) {
@@ -23,30 +24,29 @@ function Assert-LastExitCode([string]$Step) {
 
 Write-Host "DK Image AI Editor v$Version - Windows x64 publish"
 
-dotnet restore $Project -r win-x64
-Assert-LastExitCode 'dotnet restore'
+dotnet restore $AppProject -r win-x64
+Assert-LastExitCode 'app dotnet restore'
 
-dotnet build $Project -c Release --no-restore
-Assert-LastExitCode 'dotnet build'
+dotnet build $AppProject -c Release --no-restore
+Assert-LastExitCode 'app dotnet build'
 
-# 권장 안정판: self-contained multi-file
-dotnet publish $Project -c Release -r win-x64 -p:PublishProfile=win-x64 --no-restore
-Assert-LastExitCode 'dotnet publish (stable)'
+dotnet publish $AppProject -c Release -r win-x64 -p:PublishProfile=win-x64-single --no-restore
+Assert-LastExitCode 'app dotnet publish'
 
-# 편의/검증용: self-contained single-file
-dotnet publish $Project -c Release -r win-x64 -p:PublishProfile=win-x64-single --no-restore
-Assert-LastExitCode 'dotnet publish (single-file)'
+dotnet restore $LauncherProject -r win-x64
+Assert-LastExitCode 'launcher dotnet restore'
 
-if (-not (Test-Path $PublishDir)) {
-    throw "안정판 Publish 폴더를 찾을 수 없습니다: $PublishDir"
+dotnet publish $LauncherProject -c Release -r win-x64 --no-restore
+Assert-LastExitCode 'launcher dotnet publish'
+
+$AppExe = Join-Path $AppPublishDir 'DKImageAIEditor.App.exe'
+$LauncherExe = Join-Path $LauncherPublishDir 'DKImageAIEditor.exe'
+
+if (-not (Test-Path $AppExe)) {
+    throw "앱 EXE를 찾을 수 없습니다: $AppExe"
 }
-if (-not (Test-Path $SinglePublishDir)) {
-    throw "Single-file Publish 폴더를 찾을 수 없습니다: $SinglePublishDir"
-}
-
-$SingleBuiltExe = Join-Path $SinglePublishDir 'DKImageAIEditor.exe'
-if (-not (Test-Path $SingleBuiltExe)) {
-    throw "Single-file EXE를 찾을 수 없습니다: $SingleBuiltExe"
+if (-not (Test-Path $LauncherExe)) {
+    throw "런처 EXE를 찾을 수 없습니다: $LauncherExe"
 }
 
 if (Test-Path $DistDir) {
@@ -54,13 +54,13 @@ if (Test-Path $DistDir) {
 }
 New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
 
-Copy-Item (Join-Path $PublishDir '*') $StageDir -Recurse -Force
+Copy-Item $LauncherExe $StageDir -Force
+Copy-Item $AppExe $StageDir -Force
 Copy-Item (Join-Path $PSScriptRoot 'README.md') $StageDir -Force
 Copy-Item (Join-Path $PSScriptRoot 'LICENSE') $StageDir -Force
 
 Compress-Archive -Path (Join-Path $StageDir '*') -DestinationPath $ZipPath -CompressionLevel Optimal
-Copy-Item $SingleBuiltExe $SingleExePath -Force
 
-Write-Host "Stable publish: $PublishDir"
-Write-Host "Stable package: $ZipPath"
-Write-Host "Single-file package: $SingleExePath"
+Write-Host "Launcher: $LauncherExe"
+Write-Host "App: $AppExe"
+Write-Host "Package: $ZipPath"

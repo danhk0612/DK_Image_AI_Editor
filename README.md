@@ -2,14 +2,14 @@
 
 Windows용 OpenRouter 기반 대화형 이미지 편집기입니다.
 
-현재 정식 버전: **v1.0.3**
+현재 정식 버전: **v1.1.0**
 
 한 이미지에서 대화를 시작하고 한국어 자연어로 반복 수정할 수 있으며, 전체 편집·사각형 영역 편집·선택 영역 Crop 편집을 지원합니다.
 
 ## 기술 구성
 
 - Windows 10/11 x64
-- .NET 8
+- .NET 10
 - WPF
 - SQLite (`Microsoft.Data.Sqlite`)
 - OpenRouter Image API
@@ -70,6 +70,7 @@ Windows용 OpenRouter 기반 대화형 이미지 편집기입니다.
 - OpenRouter API Key를 Windows Credential Manager에 저장
 - 설정에서 API Key 표시/숨김 토글
 - 시작/런타임 치명 오류 로그 저장
+- 설정에서 GitHub Release 기반 최신 버전 확인 및 업데이트 적용
 
 ## 기본 사용법
 
@@ -94,7 +95,7 @@ Windows용 OpenRouter 기반 대화형 이미지 편집기입니다.
 
 ## 빌드
 
-Visual Studio 2022 또는 .NET 8 SDK가 설치된 Windows 환경에서:
+Visual Studio 2022 또는 .NET 10 SDK가 설치된 Windows 환경에서:
 
 ```powershell
 dotnet restore .\DK_Image_AI_Editor.sln
@@ -109,7 +110,7 @@ dotnet run --project .\src\DKImageAIEditor\DKImageAIEditor.csproj -c Release
 
 ## Windows x64 배포
 
-루트의 `publish.ps1`을 실행하면 두 종류의 self-contained 패키지를 만듭니다.
+루트의 `publish.ps1`을 실행하면 .NET 10 기반 Windows x64 배포 ZIP을 만듭니다.
 
 ```powershell
 .\publish.ps1
@@ -119,13 +120,25 @@ dotnet run --project .\src\DKImageAIEditor\DKImageAIEditor.csproj -c Release
 
 ```text
 dist\DK-Image-AI-Editor-vX.Y.Z-win-x64.zip
-dist\DK-Image-AI-Editor-vX.Y.Z-win-x64-single.exe
 ```
 
-- `win-x64.zip`: **권장 안정판**. self-contained multi-file 방식이며 ZIP 전체를 압축 해제한 뒤 `DKImageAIEditor.exe`를 실행합니다.
-- `win-x64-single.exe`: 단일 EXE 편의/검증용 self-contained 빌드입니다. SQLite 네이티브 구성 요소는 실행 시 임시 위치에 추출될 수 있습니다.
+ZIP에는 사용자가 실행하는 작은 런처와 실제 앱이 포함됩니다.
 
-두 방식 모두 대상 PC에 별도 .NET 8 Runtime 설치는 필요하지 않습니다.
+```text
+DKImageAIEditor.exe          # .NET 10 Desktop Runtime 검사 및 업데이트 적용 런처
+DKImageAIEditor.App.exe      # framework-dependent single-file WPF 앱
+README.md
+LICENSE
+```
+
+- 실제 앱은 **framework-dependent single-file** 방식으로 배포되어 .NET Desktop Runtime 자체를 ZIP에 포함하지 않습니다.
+- 대상 PC에는 **Microsoft .NET 10 Desktop Runtime (x64)** 이 필요합니다.
+- 런타임이 없으면 `DKImageAIEditor.exe`가 한국어 안내를 표시하고 Microsoft 공식 .NET 10 다운로드 페이지를 열 수 있습니다.
+- 설정의 **업데이트 확인** 버튼은 GitHub의 최신 정식 Release를 확인합니다.
+- 새 버전 설치를 선택하면 업데이트 ZIP을 내려받은 뒤 런처의 임시 업데이트 프로세스가 실행 중인 앱을 종료하고 파일을 교체한 다음 새 버전을 다시 실행합니다.
+- 기존 설정, Credential Manager의 API Key, SQLite DB, 대화 이미지는 `%LOCALAPPDATA%\DKImageAIEditor` 경로를 계속 사용하므로 배포 구조 변경의 영향을 받지 않습니다.
+
+개발용 빌드에는 .NET 10 SDK가 필요하며, NativeAOT 런처를 로컬에서 Publish하려면 Windows용 NativeAOT 빌드 도구가 준비되어 있어야 합니다. 공식 Release는 GitHub Actions의 Windows 러너에서 생성됩니다.
 
 ## 데이터 저장
 
