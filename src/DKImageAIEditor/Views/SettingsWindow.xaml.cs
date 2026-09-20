@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
         PresetModelComboBox.SelectedValue = _settings.SelectedModelId;
         CustomModelTextBox.Text = _settings.CustomModelId;
         CustomStoragePathTextBox.Text = _settings.CustomImageStoragePath;
+        CurrentVersionTextBlock.Text = $"현재 버전: v{UpdateService.CurrentVersionText}";
 
         if (PresetModelComboBox.SelectedItem is null)
         {
@@ -128,6 +129,59 @@ public partial class SettingsWindow : Window
         if (dialog.ShowDialog(this) == true)
         {
             CustomStoragePathTextBox.Text = dialog.FolderName;
+        }
+    }
+
+    private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        UpdateStatusTextBlock.Text = "최신 버전을 확인하고 있습니다.";
+
+        try
+        {
+            var update = await UpdateService.CheckForUpdateAsync();
+            if (update is null)
+            {
+                UpdateStatusTextBlock.Text = "현재 최신 버전을 사용하고 있습니다.";
+                return;
+            }
+
+            UpdateStatusTextBlock.Text = $"새 버전 {update.TagName}을 사용할 수 있습니다.";
+
+            var result = MessageBox.Show(
+                this,
+                $"새 버전 {update.TagName}을 사용할 수 있습니다.\n\n지금 다운로드하고 업데이트한 뒤 프로그램을 다시 시작할까요?",
+                "DK Image AI Editor 업데이트",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            UpdateStatusTextBlock.Text = "업데이트 패키지를 다운로드하고 있습니다.";
+            var packagePath = await UpdateService.DownloadUpdateAsync(update);
+
+            UpdateStatusTextBlock.Text = "업데이트를 적용하고 프로그램을 다시 시작합니다.";
+            UpdateService.StartUpdate(packagePath);
+        }
+        catch (Exception exception)
+        {
+            UpdateStatusTextBlock.Text = "업데이트를 확인하거나 적용하지 못했습니다.";
+            MessageBox.Show(
+                this,
+                $"업데이트 처리 중 오류가 발생했습니다.\n\n{exception.Message}",
+                "업데이트 오류",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            if (IsLoaded)
+            {
+                CheckUpdateButton.IsEnabled = true;
+            }
         }
     }
 
