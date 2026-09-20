@@ -2,7 +2,7 @@
 
 ## 기술 기준
 
-- .NET 8
+- .NET 10
 - WPF
 - Windows 10/11 x64
 - OpenRouter Unified Image API
